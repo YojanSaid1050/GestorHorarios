@@ -39,6 +39,32 @@ _YA_EXISTE = 183
 HOST = '127.0.0.1'
 
 
+def _con_salida_aunque_no_haya_consola() -> None:
+    """Darle a `sys.stdout` y `sys.stderr` algo donde escribir. Siempre.
+
+    El programa instalado se abre **sin ventana de consola** —es una aplicación
+    de escritorio, no una herramienta de terminal—, y en ese caso PyInstaller
+    deja `sys.stdout` y `sys.stderr` valiendo `None`. A partir de ahí, cualquier
+    `print` revienta con «'NoneType' object has no attribute 'write'», y lo que
+    es peor, uvicorn revienta **al arrancar**: su configuración de registro
+    pregunta `sys.stdout.isatty()` para decidir si pinta colores.
+
+    Eso es exactamente lo que le pasó al primer instalador que se entregó: un
+    cuadro de error de Windows nada más abrir, «Unable to configure formatter
+    "default"», y el programa no llegaba a levantarse.
+
+    No se cambia a dónde van los mensajes de verdad: el registro de la
+    aplicación sigue yendo a su archivo. Esto solo evita que escribir en un sitio
+    que no existe tumbe el programa.
+    """
+    for nombre in ('stdout', 'stderr'):
+        if getattr(sys, nombre, None) is None:
+            setattr(sys, nombre, open(os.devnull, 'w', encoding='utf-8'))  # noqa: SIM115
+
+
+_con_salida_aunque_no_haya_consola()
+
+
 class UnaSolaCopia:
     """Impide que se abran dos Gestores de Horarios a la vez."""
 
@@ -123,8 +149,17 @@ def _arrancar_servidor(puerto: int):
 
     from gestor.web.aplicacion import app
 
+    # `log_config=None` para que uvicorn **no toque el registro**.
+    #
+    # Su configuración por defecto pregunta `sys.stdout.isatty()` al construir el
+    # formateador, y en el programa instalado —que se abre sin consola— eso
+    # tumbaba el arranque entero con «Unable to configure formatter "default"».
+    # Además esta aplicación ya tiene su propio registro, que escribe en un
+    # archivo dentro de la carpeta de datos; dejar que uvicorn montara el suyo
+    # encima era duplicarlo y, de paso, la única razón por la que le importaba
+    # si había una consola.
     configuracion = uvicorn.Config(app, host=HOST, port=puerto, log_level='warning',
-                                   access_log=False)
+                                   access_log=False, log_config=None)
     servidor = uvicorn.Server(configuracion)
     hilo = threading.Thread(target=servidor.run, name='servidor', daemon=True)
     hilo.start()
@@ -239,6 +274,26 @@ def _solo_el_servidor() -> int:
     return 0
 
 
+def _lo_que_se_le_cuenta_a_la_oficina(fallo: BaseException) -> str:
+    """El mensaje de un fallo que nadie previó, escrito para quien lo va a leer.
+
+    Sin esto, lo que sale es el cuadro de PyInstaller: «Unhandled exception in
+    script», ocho líneas de `File "logging\\config.py", line 552` y un nombre de
+    excepción. Eso no es un mensaje: es un volcado, y a quien tiene que abrir el
+    programa para armar el horario del mes no le dice absolutamente nada, ni
+    siquiera a quién llamar.
+
+    Pasó de verdad con el primer instalador entregado. Lo de dentro se arregló;
+    esto es para el siguiente, el que todavía no conocemos.
+    """
+    from gestor import rutas
+    return (f'{version.NOMBRE} no pudo abrirse.\n\n'
+            f'{type(fallo).__name__}: {fallo}\n\n'
+            f'Lo ocurrido queda apuntado con todo detalle en:\n{rutas.REGISTRO}\n\n'
+            'Ese archivo es lo que hace falta para arreglarlo. Vuelve a intentarlo; '
+            'si sigue igual, pásaselo a quien mantiene el programa.')
+
+
 def main() -> int:
     # Estas dos banderas van **después** de `_velopack()` en `abrir()`, pero se
     # leen antes de cualquier cosa porque ninguna de las dos quiere ventana.
@@ -248,7 +303,17 @@ def main() -> int:
         return comprobar()
     if '--servidor' in sys.argv[1:]:
         return _solo_el_servidor()
-    return abrir()
+    try:
+        return abrir()
+    except Exception as fallo:                                     # noqa: BLE001
+        # Nada que salga de aquí puede llegar a la pantalla como un volcado.
+        try:
+            from gestor.registro import obtener
+            obtener().exception('el programa no pudo abrirse')
+        except Exception:                                          # noqa: BLE001, S110
+            pass
+        avisar(_lo_que_se_le_cuenta_a_la_oficina(fallo), error=True)
+        return 1
 
 
 if __name__ == '__main__':

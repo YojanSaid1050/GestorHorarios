@@ -465,3 +465,63 @@ def test_nada_de_la_plantilla_puede_ir_fuera_de_datos_iniciales():
     assert plantilla.PERMITIDOS
     for permitido in plantilla.PERMITIDOS:
         assert permitido.startswith(plantilla.DENTRO_DE), permitido
+
+
+# --------------------------------- arrancar sin consola, que es como arranca
+
+def test_el_programa_no_depende_de_que_haya_una_consola():
+    """Lo que tumbó al primer instalador entregado, nada más abrirlo.
+
+    El programa instalado se abre **sin ventana de consola** —es una aplicación
+    de escritorio— y ahí PyInstaller deja `sys.stdout` y `sys.stderr` valiendo
+    `None`. Cualquier `print` revienta, y uvicorn revienta antes todavía: su
+    configuración de registro por defecto pregunta `sys.stdout.isatty()` para
+    decidir si pinta colores.
+
+    Lo que vio la oficina fue un cuadro de Windows con «Unable to configure
+    formatter "default"» y ocho líneas de volcado, sin llegar a abrir.
+
+    No se puede comprobar ejecutándolo aquí —en las pruebas siempre hay salida—,
+    así que se comprueba que las dos defensas sigan puestas.
+    """
+    codigo = (RAIZ / 'gestor' / 'principal.py').read_text(encoding='utf-8')
+    assert 'log_config=None' in codigo, (
+        'sin esto, uvicorn monta su registro y pregunta por la consola al '
+        'arrancar; en el programa instalado no hay ninguna')
+    assert '_con_salida_aunque_no_haya_consola' in codigo
+    assert 'os.devnull' in codigo
+
+
+def test_sin_stdout_ni_stderr_el_arranque_no_revienta(monkeypatch):
+    """La defensa, ejecutada: se quitan los dos y se vuelven a poner."""
+    import importlib
+    import sys as _sys
+
+    monkeypatch.setattr(_sys, 'stdout', None)
+    monkeypatch.setattr(_sys, 'stderr', None)
+
+    from gestor import principal
+    principal._con_salida_aunque_no_haya_consola()
+
+    assert _sys.stdout is not None and _sys.stderr is not None
+    print('esto habría reventado con sys.stdout a None')
+    importlib.reload(principal)
+
+
+def test_un_fallo_al_abrir_se_cuenta_con_palabras_y_no_con_un_volcado(monkeypatch):
+    """Un volcado de Python no es un mensaje: no dice ni a quién llamar."""
+    from gestor import principal
+
+    dichos = []
+    monkeypatch.setattr(principal, 'abrir',
+                        lambda: (_ for _ in ()).throw(RuntimeError('algo interno')))
+    monkeypatch.setattr(principal, 'avisar',
+                        lambda texto, **_: dichos.append(texto))
+    monkeypatch.setattr(principal.sys, 'argv', ['GestorHorarios.exe'])
+
+    assert principal.main() == 1
+    assert dichos, 'no se le contó nada a quien está delante'
+    mensaje = dichos[0]
+    assert 'no pudo abrirse' in mensaje
+    assert 'registro.log' in mensaje, 'tiene que decir dónde mirar'
+    assert 'Traceback' not in mensaje

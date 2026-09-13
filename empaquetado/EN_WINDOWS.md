@@ -1,6 +1,6 @@
 # Lo que solo se puede comprobar en Windows
 
-Todo lo demás de este proyecto se comprueba solo: `ruff`, 280 pruebas de pytest,
+Todo lo demás de este proyecto se comprueba solo: `ruff`, 283 pruebas de pytest,
 seis meses encadenados, cada norma sobre cada opción de cada mes, los 57
 controles de la pantalla pulsados y el contraste medido en claro y en oscuro. Y
 el propio ejecutable se comprueba a sí mismo al construirse.
@@ -41,6 +41,12 @@ El instalador queda en `dist\instalador\`.
 ## 1 · Que abra
 
 Ejecuta `GestorHorarios-win-Setup.exe` y espera a que abra la ventana sola.
+
+Ábrelo **desde el acceso directo, no desde una terminal**. No es lo mismo: con
+una terminal detrás el programa tiene una salida donde escribir, y desde el
+acceso directo no la tiene. El primer instalador que se entregó reventaba nada
+más abrir exactamente por eso —uvicorn preguntaba si había consola para decidir
+si pintaba colores— y desde una terminal habría abierto sin una queja.
 
 - [ ] La ventana abre y se ve la pantalla de acceso, no una ventana en blanco.
 - [ ] En Personal sale **la gente de verdad de la oficina**, no Ximena Rocío
