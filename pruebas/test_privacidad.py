@@ -124,3 +124,70 @@ def test_de_fábrica_no_hay_ninguna_regla_interna(base):
     from gestor.dominio import internas
 
     assert internas.reglas_activas() == ()
+
+
+# ------------------------------------------- lo que git se deja fuera
+
+#: Lo que tiene que estar en el repositorio para que un `git clone` arranque.
+CODIGO = ('gestor/**/*.py', 'pruebas/*.py', 'qa/*.py', 'empaquetado/*.py',
+          'empaquetado/*.spec', 'gestor/pantalla/*.html', 'gestor/pantalla/*.css',
+          'gestor/pantalla/js/*.js', 'datos_iniciales/*', 'requisitos.txt',
+          'pyproject.toml')
+
+
+def test_git_no_se_come_ningun_archivo_de_codigo():
+    """La prueba que faltaba, escrita después de que pasara.
+
+    `.gitignore` tenía `datos/` sin barra delante para no subir la carpeta de
+    datos de una instalación de desarrollo. En git, un nombre sin barra se ignora
+    **en cualquier nivel**, y el paquete `gestor/datos/` se llama igual: los seis
+    archivos de SQLite y del esquema nunca se subieron.
+
+    En el equipo donde se escribió todo funcionaba, porque los archivos estaban en
+    el disco. Lo que salió publicado no arrancaba, y no se supo hasta que la
+    publicación se paró en las pruebas con «No module named gestor.datos».
+
+    Esto no se puede detectar leyendo el código ni ejecutándolo: hay que
+    preguntarle a git. Se le pregunta por todo de una vez, y no por una lista de
+    carpetas sospechosas, porque la próxima vez será otro nombre.
+    """
+    import subprocess
+
+    archivos = sorted({str(p.relative_to(RAIZ)).replace('\\', '/')
+                       for patrón in CODIGO for p in RAIZ.glob(patrón)
+                       if p.is_file() and '__pycache__' not in p.parts})
+    assert len(archivos) > 80, f'solo se encontraron {len(archivos)} archivos que mirar'
+
+    ignorados = subprocess.run(
+        ['git', 'check-ignore', '--stdin'], cwd=RAIZ, text=True,
+        input='\n'.join(archivos), capture_output=True)
+    fuera = [x for x in ignorados.stdout.splitlines() if x.strip()]
+    assert not fuera, (
+        'git deja fuera del repositorio archivos de código, y quien lo clone no '
+        'podrá arrancarlo:\n  ' + '\n  '.join(fuera))
+
+
+def test_todo_lo_que_importa_el_programa_esta_seguido_por_git():
+    """Al revés que la anterior: no qué se ignora, sino qué está registrado.
+
+    Un archivo puede quedarse fuera sin que `.gitignore` lo mencione —recién
+    creado y sin añadir—, y el efecto es el mismo: en este equipo funciona y en
+    un clon no existe.
+    """
+    import subprocess
+
+    seguidos = set(subprocess.run(
+        ['git', 'ls-files'], cwd=RAIZ, text=True,
+        capture_output=True).stdout.splitlines())
+    if not seguidos:
+        pytest.skip('esto no es un repositorio de git')
+
+    faltan = []
+    for archivo in (RAIZ / 'gestor').rglob('*.py'):
+        relativo = str(archivo.relative_to(RAIZ)).replace('\\', '/')
+        if '__pycache__' in archivo.parts:
+            continue
+        if relativo not in seguidos:
+            faltan.append(relativo)
+    assert not faltan, (
+        'estos archivos del programa no están en git:\n  ' + '\n  '.join(faltan))

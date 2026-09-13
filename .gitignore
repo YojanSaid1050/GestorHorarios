@@ -1,3 +1,19 @@
+# Lo que solo existe en la raíz lleva una barra delante, y no es un detalle de
+# estilo: **sin ella, git ignora ese nombre en cualquier nivel**.
+#
+# Aquí costó una publicación. `datos/` estaba escrito así, sin barra, para no
+# subir la carpeta de datos de una instalación de desarrollo. Y como el paquete
+# `gestor/datos/` se llama igual, git se comió los seis archivos de SQLite y del
+# esquema: en el equipo donde se escribió todo funcionaba —los archivos estaban
+# en el disco— y el repositorio salió sin ellos. Un `git clone` limpio no
+# arrancaba, y la publicación se paró en las pruebas con «No module named
+# gestor.datos».
+#
+# De ahí la regla: lo de la raíz se ancla con `/`. Lo que puede aparecer en
+# cualquier nivel —`__pycache__`, los `.pyc`— se deja sin anclar a propósito.
+# `pruebas/test_privacidad.py` comprueba que no se ignore ningún archivo de
+# código, que es la forma de que esto no vuelva a pasar en silencio.
+
 # La plantilla de verdad de la oficina: nombres, horarios y las reglas sobre
 # personas concretas. Este repositorio es público y esto no puede entrar en él
 # **nunca**. Viaja aparte, en un secreto del repositorio que el empaquetado
@@ -7,29 +23,29 @@
 #
 # Una vez empujado a un repositorio público, borrarlo después no lo deshace:
 # queda en el historial de git y en las copias que ya se hayan hecho.
-nomina/
+/nomina/
 
-# El permiso de lectura con el que el programa instalado busca versiones
-# nuevas. Lo escribe el empaquetado a partir de un secreto del repositorio, y
-# es lo único de todo el proyecto que no puede quedar escrito en git.
+# El permiso de lectura con el que el programa instalado buscaría versiones
+# nuevas si el repositorio fuera privado. Lo escribe el empaquetado, y es lo
+# único de todo el proyecto que no puede quedar escrito en git.
 permiso_actualizaciones.json
 
 # Lo que produce el empaquetado
-build/
-dist/
+/build/
+/dist/
+/Releases/
 *.spec.bak
-Releases/
 
-# Lo que produce Python
+# La carpeta de datos de una instalación de desarrollo. Con la barra delante:
+# `gestor/datos/` es código y tiene que subirse.
+/datos/
+
+# Lo que produce Python, en cualquier nivel
 __pycache__/
 *.py[cod]
-.pytest_cache/
-.ruff_cache/
+/.pytest_cache/
+/.ruff_cache/
 *.egg-info/
-
-# La carpeta de datos de una instalación de pruebas
-datos/
-/tmp/
 
 # Del sistema
 .DS_Store
