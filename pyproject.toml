@@ -1,0 +1,123 @@
+[project]
+name = "gestor-horarios"
+description = "Programación de turnos por semanas completas para una oficina"
+requires-python = ">=3.11"
+dynamic = ["version"]
+
+# ---------------------------------------------------------------------------
+# Las reglas del linter se escriben aquí a propósito.
+#
+# Antes no estaban, y el resultado dependía de qué `ruff` se ejecutara: el del
+# PATH decía que todo estaba limpio y el de `python -m ruff` encontraba
+# cuatrocientos avisos sobre el mismo código, sin haber cambiado una línea. Un
+# comprobador que contesta cosas distintas según quién lo llame no sirve para
+# decidir nada.
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = ["datos", "dist", "build"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",    # el estilo de siempre
+    "F",         # nombres sin usar, importaciones muertas
+    "I",         # las importaciones, ordenadas
+    "B",         # trampas conocidas de Python
+    "SIM",       # cosas escritas más largas de lo necesario
+    "RET",       # returns que sobran
+    "C4",        # comprensiones
+    "PIE",       # restos innecesarios
+    "S",         # seguridad
+    "BLE",       # `except Exception` a pelo
+    "DTZ",       # fechas sin zona horaria
+]
+ignore = [
+    # La cabecera `# -*- coding: utf-8 -*-` la llevan los ochenta y dos
+    # archivos. En Python 3 no hace falta, pero este código está escrito
+    # entero en castellano —con eñes y tildes en nombres de prueba— y la
+    # cabecera es la señal de que eso es a propósito. Se conserva.
+    "UP009",
+    # `Optional[X]` se usa en todo el proyecto y se lee mejor que `X | None`
+    # cuando la línea ya lleva tres tipos. Lo importante es que sea uno solo en
+    # todas partes, y lo es.
+    "UP045",
+    # `assert` en las pruebas es la forma de escribir pruebas.
+    "S101",
+    # Las consultas se arman con nombres de tabla que están en el propio código,
+    # nunca con datos de fuera; los valores siempre van por parámetro.
+    "S608",
+    # Capturar `Exception` y dejar constancia es deliberado en los sitios donde
+    # está: la aplicación tiene que arrancar aunque una parte falle, y siempre
+    # se escribe en el registro. Donde no se registra, `BLE001` sí avisa.
+    "B008",      # FastAPI usa valores por defecto que son llamadas, a propósito
+    "SIM105",    # `contextlib.suppress` no siempre se lee mejor que try/except
+
+    # Las fechas van en hora local **a propósito**. Esto es una aplicación de
+    # escritorio para una oficina, en un huso, y lo que se compara con «hoy» y
+    # lo que se escribe en el nombre de una copia de seguridad es el día que
+    # tiene esa oficina en el calendario de la pared. Con UTC, una copia hecha a
+    # las siete de la tarde llevaría en el nombre la fecha del día siguiente.
+    "DTZ005", "DTZ007", "DTZ011",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# ---------------------------------------------------------------------------
+# El motor y las piezas que se trajeron **tal cual** de la versión anterior.
+#
+# Están exentas del largo de línea a propósito, y la razón importa: se portaron
+# sin tocar una coma para poder compararlas línea a línea con el original y
+# poder afirmar que el reparto de turnos hace exactamente lo mismo. Reformatear
+# esos archivos convertiría esa comparación en imposible, y con ella la única
+# garantía de que el motor no cambió de comportamiento en la mudanza.
+#
+# El código escrito en esta versión sí cumple las 100 columnas.
+# ---------------------------------------------------------------------------
+# `BLE001` **no** está en esta lista a propósito: un `except Exception` que se
+# come un error en silencio es una cuestión de comportamiento, no de estilo, y
+# ahí sí se quiere el aviso aunque el archivo venga portado. Ese aviso fue el
+# que destapó que el Excel imprimía un tope de jornadas equivocado.
+"gestor/motor/balance.py" = ["E501", "B023", "C408"]
+"gestor/motor/comun.py" = ["E501", "SIM103"]
+"gestor/motor/construccion.py" = ["E501", "PIE810"]
+"gestor/motor/decisiones.py" = ["E501", "SIM102"]
+"gestor/motor/orquestacion.py" = ["E501"]
+"gestor/motor/presupuesto.py" = ["E501", "SIM113"]
+"gestor/motor/reparacion.py" = ["E501", "B007"]
+"gestor/motor/validacion.py" = ["E501", "SIM102"]
+"gestor/motor/vocabulario.py" = ["E501", "F401"]
+"gestor/servicios/excel.py" = ["E501"]
+"gestor/servicios/apariencia.py" = ["E501", "S110"]
+"gestor/dominio/avisos.py" = ["E501"]
+"gestor/dominio/rotacion.py" = ["E501", "SIM102"]
+"gestor/dominio/nucleo.py" = ["E501"]
+"gestor/dominio/internas.py" = ["E501", "B905"]
+
+# Las pruebas y la QA acceden a piezas internas a propósito: es lo que
+# comprueban. Y arrancan procesos, que es cómo levantan el servidor de verdad.
+"pruebas/*" = ["S", "BLE001"]
+"qa/*" = ["S", "BLE001"]
+"empaquetado/*" = ["S"]
+
+# El arranque y el registro sueltan el mutex y montan el archivo de log. Si eso
+# falla no hay nada que hacer ni —en el caso del registro— dónde apuntarlo: es
+# el propio registro el que no se pudo abrir. Un `except: pass` ahí es la
+# respuesta correcta, y en cualquier otro sitio no lo sería.
+"gestor/principal.py" = ["S110"]
+# La autocomprobación habla con **su propio servidor** en 127.0.0.1 y arranca
+# **su propio ejecutable**. No hay ninguna entrada de fuera en ninguna de las
+# dos cosas: la dirección la construye ella con un puerto que acaba de pedir al
+# sistema, y el programa que lanza es el que está ejecutándose.
+"gestor/autocomprobacion.py" = ["S310", "S603"]
+"gestor/registro.py" = ["S110"]
+
+
+
+[tool.ruff.lint.isort]
+known-first-party = ["gestor", "pruebas", "qa"]
+
+[tool.pytest.ini_options]
+testpaths = ["pruebas"]
+python_files = ["test_*.py"]
+addopts = "-q"
+markers = ["lenta: genera meses completos y tarda"]

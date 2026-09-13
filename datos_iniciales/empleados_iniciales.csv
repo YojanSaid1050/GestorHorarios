@@ -1,0 +1,19 @@
+nombre,cargo,area,tipo_turno,turno_fijo,descanso_fijo,inicio_rotacion,fecha_ancla_rotacion,orden_rotacion,exento_especiales,alta_desde,retirado_desde,pareja_nombre
+Ximena Rocío Peralta Osorio,GUÍA SOCIAL,gestion_social,fijo,PM,,,,0,0,2026-08-01,,Bernardo Iván Quiroga Mejía
+Bernardo Iván Quiroga Mejía,GUÍA SOCIAL,gestion_social,fijo,AM,,,,0,0,2026-08-01,,Ximena Rocío Peralta Osorio
+Carolina Estefanía Duarte Rincón,GUÍA SOCIAL,gestion_social,rotativo,,5,AM,2026-09-14,0,1,2026-08-01,,Elena Marcela Villalba Cuéllar
+Damián Fernando Ferreira Lozano,GUÍA SOCIAL,gestion_social,fijo,AM,,,,0,0,2026-08-01,,Gabriela Sofía Moncada Bustos
+Elena Marcela Villalba Cuéllar,GUÍA SOCIAL,gestion_social,rotativo,,,PM,2026-09-14,0,0,2026-08-01,,Carolina Estefanía Duarte Rincón
+Fabián Octavio Zambrano Pineda,GUÍA SOCIAL,gestion_social,fijo,PM,,,,0,0,2026-08-01,,Hernán Baltasar Salgado Vergara
+Gabriela Sofía Moncada Bustos,GUÍA SOCIAL,gestion_social,fijo,PM,,,,0,0,2026-08-01,,Damián Fernando Ferreira Lozano
+Hernán Baltasar Salgado Vergara,GUÍA SOCIAL,gestion_social,fijo,AM,,,,0,0,2026-08-01,,Fabián Octavio Zambrano Pineda
+Isabel Ofelia Robledo Cáceres,GUÍA SOCIAL,gestion_social,fijo,PM,3,,,0,1,2026-08-01,,Julián Norberto Maldonado Ávila
+Julián Norberto Maldonado Ávila,GUÍA SOCIAL,gestion_social,fijo,AM,,,,0,0,2026-08-24,,Isabel Ofelia Robledo Cáceres
+Karina Patricia Escobar Trujillo,GUÍA SOCIAL,atencion_ciudadano,administrativo,,,,,0,1,2026-08-01,2026-08-15,
+Leonardo Wilmar Bermúdez Pardo,GUÍA SOCIAL,atencion_ciudadano,fijo,AM,,,,0,0,2026-08-01,,
+Marcela Ivonne Toro Quintero,GUÍA SOCIAL,atencion_ciudadano,fijo,AM,,,,0,0,2026-08-24,,
+Rubén Emilio Cárdenas Riveros,GUÍA SOCIAL,atencion_ciudadano,rotativo,,,AM,2026-08-31,0,0,2026-08-24,,
+Olga Beatriz Melgarejo Lemus,GUÍA SOCIAL,atencion_ciudadano,administrativo,,,,,0,1,2026-08-24,,
+Pablo Sebastián Guevara Mosquera,GUÍA SOCIAL,comunicaciones,rotativo,,,AM,2026-08-03,0,0,2026-08-01,,
+Teresa Amparo Delgado Sanabria,GUÍA SOCIAL,comunicaciones,rotativo,,,AM,2026-08-31,1,0,2026-08-01,,
+Samuel Vicente Prieto Valderrama,GUÍA SOCIAL,comunicaciones,rotativo,,,PM,2026-08-03,2,0,2026-08-01,,

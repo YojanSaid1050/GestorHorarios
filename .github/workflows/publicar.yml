@@ -1,0 +1,74 @@
+name: Publicar una versión
+
+# Se dispara al empujar una etiqueta v4.0.0, v4.0.1… Nunca en cada commit: una
+# versión publicada es algo que alguien decide, no un efecto secundario de
+# guardar código.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requisitos.txt
+          pip install pyinstaller
+
+      - name: Comprobar que la etiqueta y la versión del programa coinciden
+        # Publicar la etiqueta v4.0.1 con el programa diciendo 4.0.0 deja a la
+        # aplicación instalada creyendo que ya está al día. Se para aquí.
+        shell: pwsh
+        run: |
+          $enElCodigo = python -c "from gestor.version import VERSION; print(VERSION)"
+          $enLaEtiqueta = "${{ github.ref_name }}".TrimStart('v')
+          if ($enElCodigo -ne $enLaEtiqueta) {
+            Write-Error "La etiqueta dice $enLaEtiqueta y gestor/version.py dice $enElCodigo."
+            exit 1
+          }
+
+      - name: Pasar la batería de pruebas
+        # No se publica lo que no pasa sus propias pruebas.
+        run: python -m pytest -q
+
+      - name: Instalar vpk
+        run: dotnet tool install -g vpk
+
+      - name: Comprobar que la plantilla de la oficina está puesta
+        # El repositorio es público, así que lo que hay escrito en él son
+        # dieciocho personas inventadas. La de verdad llega en este secreto. Sin
+        # él se construiría un instalador que arranca perfectamente y que la
+        # oficina no puede usar: sin su gente y sin sus dos meses base, que son
+        # el punto de partida del que cuelga todo lo demás.
+        shell: pwsh
+        env:
+          GESTOR_NOMINA: ${{ secrets.GESTOR_NOMINA }}
+        run: |
+          if (-not $env:GESTOR_NOMINA) {
+            Write-Error ("Falta el secreto GESTOR_NOMINA. Se publicaria un " +
+              "instalador con dieciocho personas inventadas dentro.")
+            exit 1
+          }
+
+      - name: Construir el instalador
+        env:
+          GESTOR_NOMINA: ${{ secrets.GESTOR_NOMINA }}
+        run: python empaquetado/construir.py
+
+      - name: Publicar en la versión de GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/instalador/*
+          generate_release_notes: true

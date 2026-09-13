@@ -1,0 +1,2393 @@
+/*
+ * Gestor de Horarios · sistema visual final de escritorio (V13)
+ * ------------------------------------------------------------------
+ * Este archivo es la capa canónica de presentación. styles.css conserva
+ * estilos funcionales/históricos de módulos concretos; cualquier decisión
+ * visual global (espaciado, controles, navegación, tarjetas, marca y tablas)
+ * debe vivir aquí para evitar seguir acumulando overrides por versión.
+ */
+
+/* 1. Tokens de interfaz */
+:root{
+  --ui-control-h:44px;
+  --ui-radius-sm:8px;
+  --ui-radius-md:12px;
+  --ui-radius-lg:16px;
+  --ui-gap-xs:6px;
+  --ui-gap-sm:8px;
+  --ui-gap-md:12px;
+  --ui-gap-lg:16px;
+  /* La superficie de las tarjetas sale del mismo sitio que el resto: así el
+     modo oscuro solo tiene que cambiar `--surface` y todo la sigue. */
+  --ui-surface:var(--surface, #fff);
+  --ui-surface-soft:var(--purple-pale);
+  --ui-shadow-card:var(--sombra-tarjeta, 0 8px 24px rgba(35,24,48,.055));
+  --ui-shadow-float:var(--sombra-flotante, 0 14px 38px rgba(27,19,38,.16));
+  --ui-glass:rgba(255,255,255,.12);
+  --ui-glass-hover:rgba(255,255,255,.19);
+  --ui-glass-border:rgba(255,255,255,.24);
+}
+
+/* 2. Base y jerarquía */
+body{line-height:1.42;background:var(--bg);color:var(--text)}
+main{width:min(1660px,95vw);margin:18px auto 24px}
+.card{
+  background:var(--ui-surface);
+  border:1px solid var(--theme-card-border);
+  border-radius:var(--ui-radius-lg);
+  box-shadow:var(--ui-shadow-card);
+  padding:18px;
+  margin-bottom:16px;
+}
+.card>h2,.section-head h2{letter-spacing:-.015em}
+.section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--ui-gap-lg);flex-wrap:wrap;margin-bottom:14px}
+.section-head>div:first-child{flex:1 1 520px;min-width:0}
+.section-head p,.card>p.muted{max-width:1040px;line-height:1.5}
+.head-actions,.actions,.modal-actions,.toolbar-actions,.official-actions,.backup-actions,.theme-actions{
+  display:flex;align-items:center;gap:var(--ui-gap-sm);flex-wrap:wrap;
+}
+
+/* 3. Cabecera, sesión y marca */
+.topbar{
+  min-height:92px;
+  padding:16px 3.8vw;
+  gap:20px;
+  background:linear-gradient(118deg,var(--purple-dark) 0%,var(--purple) 72%,var(--purple-mid) 100%);
+  box-shadow:0 1px 0 rgba(255,255,255,.08) inset;
+}
+.topbar h1{font-size:clamp(23px,2vw,30px);line-height:1.15;letter-spacing:-.02em}
+.topbar-right{display:flex;align-items:center;gap:12px;min-width:0}
+.session-pill{
+  display:flex;align-items:center;gap:8px;
+  padding:7px 8px 7px 12px;
+  border:1px solid var(--ui-glass-border);
+  border-radius:12px;
+  background:var(--ui-glass);
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+}
+.session-logout{
+  min-height:34px!important;height:34px!important;padding:6px 11px!important;
+  background:var(--ui-glass)!important;border:1px solid var(--ui-glass-border)!important;
+}
+.session-logout:hover{background:var(--ui-glass-hover)!important;filter:none}
+
+/* Contenedor normal del icono del Gestor: cristal, nunca fondo negro. */
+.brand-mark{
+  width:62px;height:62px;padding:4px;
+  display:grid;place-items:center;
+  border-radius:15px;
+  background:var(--ui-glass);
+  border:1px solid var(--ui-glass-border);
+  box-shadow:0 8px 18px rgba(18,17,31,.10);
+  overflow:hidden;
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+}
+.brand-mark img{
+  display:block;width:54px;height:54px;object-fit:contain;
+  background:transparent!important;border-radius:12px;
+}
+/* CABLEMOVIL usa una placa de cristal semitransparente, equivalente a sesión/salir. */
+body[data-app-theme="cablemovil"] .brand-mark{
+  width:194px!important;height:64px!important;padding:8px 14px!important;
+  background:rgba(255,255,255,.13)!important;
+  border:1px solid rgba(255,255,255,.25)!important;
+  border-radius:14px!important;
+  box-shadow:0 8px 20px rgba(17,25,48,.13)!important;
+  overflow:hidden!important;
+  backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);
+}
+body[data-app-theme="cablemovil"] .brand-mark img{
+  width:100%!important;height:46px!important;object-fit:contain!important;
+  background:transparent!important;border-radius:0!important;box-shadow:none!important;
+}
+body:not([data-app-theme="cablemovil"]) .brand-mark img[data-brand-type="gestor"]{background:transparent!important}
+
+/* 4. Barra de periodo y navegación */
+.toolbar{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;padding:14px 16px}
+.toolbar .period-control{min-width:220px;flex:0 0 auto}
+.toolbar-actions{align-items:flex-end}
+.toolbar-actions button{white-space:nowrap}
+.activity-pill{margin-left:auto;align-self:flex-end}
+.tabs{
+  display:flex;align-items:center;gap:7px;flex-wrap:wrap;
+  margin:0 0 14px;padding:0;
+}
+.tabs button{
+  min-height:42px;padding:9px 13px;
+  background:var(--ui-surface);color:var(--purple-dark);
+  border:1px solid var(--theme-border);border-radius:10px;
+  box-shadow:0 1px 0 rgba(255,255,255,.7) inset;
+}
+.tabs button:hover{background:var(--purple-pale);filter:none;border-color:var(--purple-mid)}
+.tabs button.active{background:var(--purple);color:#fff;border-color:var(--purple);box-shadow:none}
+.tabs button[data-count]:not([data-count="0"])::after{margin-left:6px}
+
+/* 5. Controles y botones */
+input:not([type="checkbox"]):not([type="radio"]),select,button{min-height:var(--ui-control-h)}
+input:not([type="checkbox"]):not([type="radio"]),select,textarea{
+  width:100%;border:1px solid var(--border);border-radius:var(--ui-radius-sm);background:var(--surface);
+  transition:border-color .15s ease,box-shadow .15s ease,background .15s ease;
+}
+input:focus,select:focus,textarea:focus{
+  outline:none;border-color:var(--purple-mid);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--theme-focus) 35%,transparent);
+}
+button{
+  border-radius:var(--ui-radius-sm);padding:9px 13px;
+  display:inline-flex;align-items:center;justify-content:center;
+  gap:6px;line-height:1.2;font-weight:700;
+  transition:filter .14s ease,transform .06s ease,background .14s ease,border-color .14s ease;
+}
+button:active:not(:disabled){transform:translateY(1px)}
+button:disabled{opacity:.5;filter:saturate(.75)}
+.secondary{background:var(--secundario, #766d7d)}
+.danger-button{background:var(--danger)}
+.subtle-action{min-height:40px}
+.actions{grid-column:1/-1;min-height:var(--ui-control-h)}
+.actions button,.head-actions button{margin:0!important}
+
+/* 6. Formularios */
+form{row-gap:12px;column-gap:12px;align-items:start}
+form>label:not(.check){height:auto!important;justify-content:flex-start!important;min-width:0}
+form>label:not(.check)>small{line-height:1.38;margin-top:1px}
+form textarea{min-height:92px;resize:vertical}
+.check{min-height:var(--ui-control-h);align-items:center}
+.panel-check{border-radius:10px}
+.date-select-group{margin-top:0!important;gap:7px}
+.date-select-group select{min-height:var(--ui-control-h)!important;height:var(--ui-control-h)!important}
+.field-invalid{border-radius:10px}
+.form-alert{border-radius:10px}
+
+/* 7. Tablas y acciones */
+.scroll{border-radius:12px;scrollbar-gutter:stable}
+table{font-size:13px}
+th{height:40px;padding:8px 9px}
+td{padding:8px 9px}
+th:first-child{border-top-left-radius:8px}
+th:last-child{border-top-right-radius:8px}
+.employee-name{box-shadow:1px 0 0 var(--border)}
+td.table-actions{min-width:210px!important;padding:6px!important;white-space:normal}
+td.table-actions button{min-width:86px;min-height:36px!important;height:36px!important;margin:2px!important;padding:7px 10px}
+.table-actions{justify-content:center}
+.staff-table-help{margin-top:0}
+.employee-inactive td{background:var(--surface-2);color:var(--muted)}
+.employee-inactive:hover td{background:var(--surface-2)!important}
+.badge-inactive{background:var(--surface-3);color:#5f5665}
+
+/* 8. Estados, alternativas y validaciones */
+.alternatives-panel{border-radius:12px}
+.alternative-list{gap:9px}
+.alternative-button{border-radius:10px!important}
+.alternative-state{white-space:nowrap}
+.validation-grid{gap:12px}
+.validation-card{border-radius:11px;line-height:1.45}
+.rule-group{margin-top:16px}
+.rule-group-heading{margin-bottom:9px;border-radius:11px}
+.rule-cards{gap:12px!important}
+.rule-user-card{min-height:150px;border-radius:12px;padding:13px}
+.rule-user-head{gap:8px!important}
+.rule-user-head .rule-status,.rule-user-head span{max-width:100%;white-space:normal!important}
+.info-box,.warning-box,.hours-info,.partial-status{border-radius:10px}
+
+/* 9. Configuración y acciones sensibles */
+.security-panel,.factory-reset-card,.backup-card,.reset-program-card,.app-theme-card{overflow:hidden}
+.theme-settings-row{align-items:end}
+.reset-program-row{
+  display:grid!important;
+  grid-template-columns:minmax(210px,260px) minmax(150px,200px) max-content!important;
+  align-items:end!important;gap:10px!important;
+}
+.reset-period-control{min-width:0!important;max-width:none!important}
+.reset-program-row button{min-height:var(--ui-control-h);height:var(--ui-control-h);white-space:nowrap}
+.reset-program-note{margin-top:8px}
+.factory-reset-content{align-items:center}
+
+/* 10. Modales, toasts y login */
+.modal-card{border-radius:16px;box-shadow:var(--ui-shadow-float)}
+.modal-actions{justify-content:flex-end}
+.toast{border-radius:12px}
+.login-overlay{background:linear-gradient(135deg,var(--purple-dark),var(--purple))}
+.login-card{border:0}
+.login-card .login-icon{background:transparent!important}
+body[data-app-theme="cablemovil"] .login-card .login-icon{
+  width:min(260px,78%);height:86px;object-fit:contain;border-radius:0;background:transparent!important;
+}
+
+/* 11. Ventanas más estrechas de escritorio */
+@media(max-width:1180px){
+  .topbar{padding-inline:3vw}
+  .toolbar{align-items:stretch}
+  .activity-pill{margin-left:0}
+  .reset-program-row{grid-template-columns:1fr 1fr!important}
+  .reset-program-row button{grid-column:1/-1;width:100%}
+}
+@media(max-width:900px){
+  main{width:min(96vw,1660px)}
+  .topbar{align-items:flex-start}
+  .topbar-right{flex-direction:column;align-items:flex-end}
+  .toolbar .period-control,.toolbar-actions{width:100%}
+  .toolbar-actions button{flex:1 1 180px}
+  .section-head{flex-direction:column}
+  .head-actions{width:100%}
+  .head-actions button{flex:1 1 180px}
+  .reset-program-row{grid-template-columns:1fr!important}
+  .reset-program-row button{grid-column:auto}
+}
+
+@media(max-width:700px){
+  .topbar{flex-direction:column;align-items:stretch}
+  .topbar-right{width:100%;flex-direction:column;align-items:stretch}
+  .session-pill{width:100%;justify-content:space-between;flex-wrap:wrap}
+  .brand-mark,body[data-app-theme="cablemovil"] .brand-mark{max-width:100%}
+}
+
+/* 12. Correcciones de coherencia V13 · login, tablas y paleta */
+/* El acceso mantiene todos sus controles centrados, independientemente del tema. */
+.login-card{
+  align-items:center!important;
+  text-align:center;
+}
+.login-card>h2,.login-card>p,.login-card>small{width:100%;text-align:center}
+.login-card>label,.login-card>.form-alert{
+  width:min(100%,320px)!important;
+  align-self:center!important;
+  text-align:left;
+}
+.login-card>button{
+  width:min(100%,320px)!important;
+  align-self:center!important;
+}
+.login-card .login-icon{align-self:center!important;margin-inline:auto}
+
+/* Solo el cronograma principal usa la paleta HEX/RGB configurable. Las listas
+   de datos tienen su propia cabecera sobria (ver «Listas y avisos de acceso»),
+   así que quedan fuera de esta regla. */
+table:not(#tabla-horario):not(.data-table) th{
+  background:var(--purple)!important;
+  color:#fff!important;
+}
+table:not(#tabla-horario):not(.data-table) td{
+  border-color:var(--theme-soft-border)!important;
+}
+table:not(#tabla-horario) tbody tr:hover td{
+  background:var(--purple-pale);
+}
+table:not(#tabla-horario) tbody tr:hover .employee-name{
+  background:var(--purple-pale)!important;
+}
+#tabla-horario th{
+  background:var(--schedule-header,var(--purple));
+  color:var(--schedule-header-text,#fff);
+}
+/* Los días especiales llevan su propio color, el mismo que el Excel: sábado,
+   domingo, festivo, último viernes administrativo y días de otro mes. Iban
+   escritos con menos peso que la regla general de la cabecera, así que en la
+   pantalla se veían todos del color corporativo y solo el Excel los
+   distinguía. El color de la letra sale del propio fondo, para que cualquier
+   paleta se lea. */
+#tabla-horario thead th.saturday{
+  background:var(--schedule-saturday,#76518F);
+  color:var(--schedule-saturday-text,#fff);
+}
+#tabla-horario thead th.sunday{
+  background:var(--schedule-sunday,#76518F);
+  color:var(--schedule-sunday-text,#fff);
+}
+#tabla-horario thead th.holiday{
+  background:var(--schedule-holiday,#A878CA);
+  color:var(--schedule-holiday-text,#fff);
+}
+#tabla-horario thead th.admin-friday{
+  background:var(--schedule-admin-friday,#C9A7E8);
+  color:var(--schedule-admin-friday-text,#2f2140);
+}
+
+/* Cada color puede volver a su valor original sin afectar el resto. */
+.color-grid>label{
+  position:relative;
+  background:color-mix(in srgb,var(--purple-pale) 58%,var(--surface))!important;
+  border-color:var(--theme-soft-border)!important;
+}
+.color-reset-one{
+  min-height:28px!important;
+  height:28px!important;
+  width:auto!important;
+  align-self:flex-start;
+  margin-top:2px;
+  padding:4px 8px!important;
+  border:1px solid var(--theme-border)!important;
+  background:transparent!important;
+  color:var(--purple-dark)!important;
+  font-size:11px!important;
+  font-weight:700;
+}
+.color-reset-one:hover{
+  background:var(--purple-pale)!important;
+  border-color:var(--purple-mid)!important;
+  filter:none!important;
+}
+
+/* En CABLEMOVIL la cabecera usa el recurso blanco transparente enviado por el usuario. */
+body[data-app-theme="cablemovil"] .brand-mark img[data-brand-type="cablemovil-header"]{
+  width:100%!important;height:46px!important;object-fit:contain!important;
+  background:transparent!important;
+}
+
+/* V13.1 · edición guiada y Top 5 */
+.current-schedule-reference{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 12px;margin:10px 0;border:1px solid var(--theme-soft-border);border-radius:10px;background:var(--purple-pale)}
+.current-schedule-reference>div{display:flex;flex-direction:column;gap:3px;min-width:0}.current-schedule-reference span{font-size:12px;color:var(--muted);line-height:1.4}.current-schedule-reference button{flex:0 0 auto;min-height:40px}.alternative-name{display:flex;flex-direction:column;gap:3px}.alternative-name small{font-size:11px;font-weight:600;color:var(--muted)}
+.manual-mode-controls{display:grid;grid-template-columns:minmax(220px,1fr) minmax(220px,1fr) minmax(220px,1fr);gap:10px;margin:0 0 12px}.manual-mode-controls label{min-width:0}.manual-shift+small,.manual-scroll td small{display:block;font-size:10px;margin-top:3px;color:var(--muted)}
+.form-edit-modal{width:min(900px,96vw);max-height:88vh;overflow:auto}.form-edit-modal #edicion-formulario-contenido>form{margin:0}.form-edit-modal #edicion-formulario-contenido>form .actions{position:sticky;bottom:0;background:var(--surface);padding-top:12px;border-top:1px solid var(--theme-soft-border);z-index:2}
+@media(max-width:900px){.manual-mode-controls{grid-template-columns:1fr}.current-schedule-reference{align-items:stretch;flex-direction:column}.current-schedule-reference button{width:100%}.form-edit-modal{max-height:none}}
+
+/* R9 · correcciones visuales globales. */
+:root{--schedule-ADM_GS:#D9EAD3;--schedule-ADM_AC:#D9EAF7}
+.topbar{min-height:78px;padding-block:12px}.topbar p{margin-top:3px}
+.retire-employee-card{width:min(560px,96vw);display:grid;grid-template-columns:1fr;gap:15px}
+.retire-employee-card .modal-head{margin-bottom:0}.retire-employee-card label{min-width:0;width:100%}
+.retire-employee-card .date-select-group{width:100%;grid-template-columns:minmax(76px,.75fr) minmax(165px,1.35fr) minmax(100px,.8fr)}
+.retire-employee-card .modal-actions{margin-top:2px}
+.password-field{position:relative;display:block;width:100%}.password-field input{width:100%;padding-right:78px}
+.password-toggle{position:absolute;right:5px;top:50%;transform:translateY(-50%);min-height:34px!important;height:34px!important;padding:5px 9px!important;background:transparent!important;color:var(--purple-dark)!important;border:1px solid var(--theme-border)!important;font-size:12px}
+.password-toggle:hover{background:var(--purple-pale)!important;filter:none!important}
+@media(max-width:620px){.retire-employee-card .date-select-group{grid-template-columns:1fr}.retire-employee-card .modal-actions button{flex:1 1 150px}}
+
+/* ------------------------------------------------------------------
+   V13.2.0 · Correcciones de interfaz
+   ------------------------------------------------------------------ */
+
+/* Botones de acción dentro de una tabla.
+   Antes tenían un ancho mínimo fijo mayor que el de la celda, así que
+   etiquetas largas como "Eliminar grupo" se salían del contenedor. Ahora la
+   celda agrupa los botones en una fila que se envuelve y cada botón mide lo
+   que necesita su texto. */
+td.table-actions{min-width:0!important;padding:6px!important;white-space:normal!important;text-align:center}
+td.table-actions button{
+  min-width:0!important;width:auto!important;max-width:100%;
+  margin:2px!important;padding:7px 11px!important;white-space:nowrap;
+}
+.row-actions{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;align-items:center;width:100%}
+.row-actions button{margin:0!important;flex:0 1 auto}
+@media(max-width:720px){
+  .row-actions{flex-direction:column;align-items:stretch}
+  .row-actions button{width:100%}
+}
+
+/* Ver contraseña: un único control.
+   WebView2/Edge dibujan su propio icono de ojo dentro de los campos de
+   contraseña. Antes convivía con un botón de texto "Mostrar/Ocultar", así que
+   había dos controles para la misma función. Se oculta el nativo y se conserva
+   un único botón con icono de ojo, que además funciona en cualquier motor. */
+.password-field input::-ms-reveal,
+.password-field input::-ms-clear{display:none!important;width:0;height:0}
+.password-field input{padding-right:46px}
+.password-toggle{
+  right:6px;width:34px!important;min-width:34px!important;padding:0!important;
+  display:grid!important;place-items:center;border-radius:8px;
+}
+.password-toggle svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+.password-toggle .eye-slash{display:none}
+.password-toggle[aria-pressed="true"] .eye-open{display:none}
+.password-toggle[aria-pressed="true"] .eye-slash{display:block}
+.password-toggle:focus-visible{outline:2px solid var(--theme-focus);outline-offset:1px}
+
+/* Tablas de datos (personal, solicitudes, asignaciones, historial, festivos).
+   Antes heredaban `white-space:nowrap` del horario, así que una etiqueta larga
+   —por ejemplo el nombre de una asignación de grupo— empujaba la columna de
+   acciones fuera de la tarjeta y "Eliminar grupo" quedaba invisible. Ahora el
+   texto se ajusta, la tabla cabe en la tarjeta y la columna de acciones queda
+   fijada a la derecha aunque haya que desplazarse. */
+.data-table{table-layout:auto}
+.data-table th,.data-table td{white-space:normal;word-break:normal;vertical-align:middle}
+.data-table th{overflow-wrap:normal}
+.data-table td{overflow-wrap:break-word}
+.data-table td:first-child,.data-table th:first-child{text-align:left;max-width:340px}
+.data-table td.table-actions{position:sticky;right:0;background:var(--surface);box-shadow:-6px 0 8px -8px #2416351f;z-index:1}
+.data-table tr:hover td.table-actions{background:var(--surface)}
+.data-table thead th:last-child{position:sticky;right:0;z-index:4}
+.data-table .group-count{display:block;font-weight:500}
+
+/* Reparto de turnos por área (reglas de cobertura configurables). */
+.coverage-rules{display:grid;gap:14px;margin-bottom:14px}
+.coverage-rule{border:1px solid var(--theme-soft-border);border-radius:12px;padding:14px;background:var(--purple-pale)}
+.coverage-rule-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.coverage-rule-head strong{font-size:15px}
+.coverage-rule-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:11px}
+.coverage-rule-grid label{gap:4px}
+.coverage-rule-grid input{background:var(--surface)}
+.coverage-rule-grid small{line-height:1.35}
+.coverage-rule-actions{display:flex;justify-content:flex-end;margin-top:11px}
+.coverage-rule-history{margin-top:10px;font-size:13px}
+.coverage-rule-history summary{cursor:pointer;font-weight:650;color:var(--purple-dark)}
+.coverage-rule-history ul{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:6px}
+.coverage-rule-history li{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--theme-card-border);border-radius:9px;padding:7px 10px}
+.coverage-rule-history button{min-height:32px;padding:5px 10px}
+@media(max-width:720px){.coverage-rule-actions button{width:100%}}
+
+/* R12 · Correcciones de uso detectadas en la auditoría visual
+   ----------------------------------------------------------------------- */
+
+/* El diálogo de confirmación ya tiene su aspa de cierre; se coloca en la
+   esquina sin desmontar la rejilla de dos columnas del icono y el texto. */
+.confirm-card { position: relative; }
+.confirm-card .modal-x {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    z-index: 1;
+}
+.confirm-card > div:nth-of-type(2) { padding-right: 26px; }
+
+/* Antes solo los campos de texto marcaban el foco. Quien navega con el
+   teclado necesita ver también dónde está sobre botones y enlaces. */
+:where(button, a, [tabindex]:not([tabindex="-1"])):focus-visible {
+    outline: 3px solid var(--theme-focus, #b995d5);
+    outline-offset: 2px;
+    border-radius: 8px;
+}
+.tabs button:focus-visible,
+.modal-x:focus-visible,
+.toast-close:focus-visible {
+    outline-offset: 1px;
+}
+
+/* Contraste: los textos pequeños del pie y de la etiqueta de festivo se
+   quedaban por debajo del mínimo legible sobre su propio fondo. */
+footer { color: #5f5568; }
+.holiday-chip { color: #2b1240; }
+
+/* Guía de primeros pasos
+   ----------------------------------------------------------------------- */
+.guide-card { border-left: 5px solid var(--purple, #5b2a86); }
+.guide-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+.guide-head h2 { margin: 0; }
+.guide-steps {
+    list-style: none;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 10px;
+    margin: 14px 0 6px;
+    padding: 0;
+    counter-reset: paso;
+}
+.guide-steps > li { display: flex; }
+.guide-step {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+    text-align: left;
+    background: var(--purple-pale, #f7f1fc);
+    color: var(--text, #292331);
+    border: 1px solid var(--theme-soft-border, #ddcaed);
+    border-radius: 11px;
+    padding: 12px 13px;
+    font-weight: 400;
+    line-height: 1.4;
+}
+.guide-step:hover {
+    filter: none;
+    background: var(--purple-light, #e8d9f6);
+    border-color: var(--purple-mid, #7d4aa8);
+}
+.guide-step strong { color: var(--purple-dark, #402060); font-size: 14px; }
+.guide-step span { font-size: 12.5px; color: #52485c; }
+.guide-dismiss { font-weight: 400; font-size: 13px; color: var(--muted, #716879); }
+.session-help {
+    background: #ffffff26;
+    color: #fff;
+    border: 1px solid #ffffff4d;
+    border-radius: 999px;
+    padding: 7px 14px;
+    font-size: 13px;
+    font-weight: 600;
+}
+.session-help:hover { background: #ffffff40; filter: none; }
+
+/* «Restaurar copia» es una etiqueta, no un botón, así que heredaba el color
+   oscuro del texto sobre el gris del botón secundario y se leía peor que el
+   resto de acciones. */
+.file-button.secondary,
+.file-button.secondary * { color: #fff; }
+
+/* Explicación visible de por qué una acción está disponible o apagada. */
+.toolbar-hint {
+    flex-basis: 100%;
+    margin: 2px 0 0;
+    font-size: 12.5px;
+    line-height: 1.45;
+}
+.toolbar-hint:empty { display: none; }
+
+/* Aviso cuando el reparto guardado ya no encaja con la gente que hay hoy. */
+.coverage-rule-warning {
+    margin: 10px 0 0;
+    padding: 9px 11px;
+    border-radius: 9px;
+    background: var(--warn-bg);
+    border: 1px solid #f0d08a;
+    color: #6b4a00;
+    font-size: 12.5px;
+    line-height: 1.45;
+}
+.coverage-rule-warning.informative{
+    background:var(--purple-pale);
+    border-color:var(--theme-soft-border);
+    color:var(--purple-dark);
+}
+
+.workflow-map{
+    display:grid;
+    grid-template-columns:repeat(4,minmax(0,1fr));
+    gap:8px;
+    margin:0 0 16px;
+}
+.workflow-map>div{
+    min-width:0;
+    padding:10px 11px;
+    border:1px solid var(--theme-soft-border);
+    border-radius:10px;
+    background:var(--purple-pale);
+}
+.workflow-map b,.workflow-map span{display:block}
+.workflow-map b{color:var(--purple-dark);margin-bottom:3px}
+.workflow-map span{font-size:12px;line-height:1.42;color:var(--muted)}
+@media(max-width:1050px){.workflow-map{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.workflow-map{grid-template-columns:1fr}}
+
+/* Calendario propio
+   -----------------------------------------------------------------------
+   Sustituye al calendario del navegador, que cada sistema pinta a su manera y
+   no admite estilo. El campo original sigue existiendo debajo. */
+.date-field { position: relative; display: block; }
+.date-field > input[type="date"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    pointer-events: none;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    border: 0;
+    padding: 0;
+}
+.date-display {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    min-height: 42px;
+    padding: 10px 12px;
+    background: var(--surface);
+    color: var(--text, #292331);
+    border: 1px solid var(--border, #ded8e5);
+    border-radius: 8px;
+    font-weight: 500;
+    text-align: left;
+}
+.date-display:hover { filter: none; border-color: var(--purple-mid, #7d4aa8); }
+.date-display[aria-expanded="true"] { border-color: var(--purple, #5b2a86); }
+.date-display svg {
+    width: 17px; height: 17px; flex: 0 0 17px;
+    fill: none; stroke: var(--purple, #5b2a86); stroke-width: 1.7;
+    stroke-linecap: round; stroke-linejoin: round;
+}
+.date-display .date-text.vacio { color: var(--muted, #716879); font-weight: 400; }
+.date-display:disabled { opacity: .55; cursor: not-allowed; }
+
+/* Calendario propio. La regla general de la aplicación da 44 px de alto a
+   cualquier botón, que está bien para un control de formulario y fatal para la
+   casilla de un día: el mes salía en 444 px, con las semanas tan separadas que
+   costaba seguir una fila. Aquí las casillas recuperan su tamaño y el mes se
+   lee de un vistazo. */
+.datepicker {
+    position: absolute;
+    z-index: 13000;
+    width: 288px;
+    padding: 0 0 10px;
+    background: var(--surface);
+    border: 1px solid var(--theme-soft-border, #ddcaed);
+    border-radius: 14px;
+    box-shadow: 0 20px 52px #28163726, 0 2px 6px #2816370f;
+    overflow: hidden;
+}
+/* Banda superior: da pie al mes y separa la navegación de la rejilla. */
+.dp-cabecera {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; padding: 10px 12px;
+    background: var(--purple-pale, #f7f1fc);
+    border-bottom: 1px solid var(--theme-card-border, #ebe6ef);
+}
+.dp-cabecera strong {
+    font-size: 14px; font-weight: 700; letter-spacing: -.01em;
+    color: var(--purple-dark, #402060);
+}
+.dp-nav {
+    width: 28px; height: 28px; min-height: 28px; padding: 0;
+    display: grid; place-items: center;
+    background: var(--surface);
+    color: var(--purple, #5b2a86);
+    border: 1px solid var(--theme-soft-border, #ddcaed);
+    border-radius: 8px; font-size: 16px; line-height: 1;
+    transition: background .12s ease, border-color .12s ease;
+}
+.dp-nav:hover:not(:disabled) {
+    background: var(--purple-light, #e8d9f6);
+    border-color: var(--purple-mid, #7d4aa8); filter: none;
+}
+.dp-nav:disabled { opacity: .3; cursor: not-allowed; }
+.dp-semana, .dp-rejilla {
+    display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
+    padding: 0 10px;
+}
+.dp-semana {
+    margin: 9px 0 2px;
+}
+.dp-semana span {
+    text-align: center; font-size: 10.5px; font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase;
+    color: var(--muted, #716879);
+}
+.dp-dia, .dp-hueco {
+    display: grid; place-items: center;
+    height: 34px; min-height: 34px; padding: 0;
+    background: transparent; color: var(--text, #292331);
+    border: 1px solid transparent; border-radius: 9px;
+    font-size: 13px; font-weight: 550;
+    font-variant-numeric: tabular-nums;
+    transition: background .12s ease, color .12s ease;
+}
+button.dp-dia:hover { background: var(--purple-pale, #f7f1fc); filter: none; }
+button.dp-dia:focus-visible {
+    outline: 2px solid var(--theme-focus, #b995d5); outline-offset: 1px;
+}
+/* Sábado y domingo, en el mismo tono con el que la aplicación los marca. */
+.dp-dia.finde { color: var(--purple-mid, #7d4aa8); }
+/* Hoy se señala con un punto, no con un marco: así no compite con el día
+   elegido, que es lo que de verdad hay que ver. */
+.dp-dia.hoy { font-weight: 700; position: relative; }
+.dp-dia.hoy::after {
+    content: ''; position: absolute; bottom: 4px;
+    width: 4px; height: 4px; border-radius: 50%;
+    background: var(--purple-mid, #7d4aa8);
+}
+.dp-dia.sel {
+    background: var(--purple, #5b2a86); color: #fff; font-weight: 700;
+    border-color: var(--purple, #5b2a86);
+}
+.dp-dia.sel::after { background: var(--surface); }
+.dp-dia.sel:hover { background: var(--purple-dark, #402060); }
+/* Fuera del rango permitido: se ve que existe pero no se puede elegir. */
+.dp-dia.fuera { color: var(--muted); opacity: .45; cursor: not-allowed; background: var(--surface-2); }
+.dp-pie {
+    display: flex; justify-content: flex-end; gap: 6px;
+    margin: 9px 10px 0; padding-top: 9px;
+    border-top: 1px solid var(--theme-card-border, #ebe6ef);
+}
+.dp-accion {
+    background: transparent; color: var(--purple, #5b2a86);
+    border: 1px solid transparent;
+    padding: 5px 10px; min-height: 30px; border-radius: 8px;
+    font-size: 12.5px; font-weight: 650;
+}
+.dp-accion:hover {
+    background: var(--purple-pale, #f7f1fc);
+    border-color: var(--theme-soft-border, #ddcaed); filter: none;
+}
+
+/* Interruptor de vista de una misma tabla (activos / retirados).
+   Sustituye al panel que antes se añadía debajo con una segunda tabla. */
+.segmented {
+    display: inline-flex;
+    padding: 3px;
+    gap: 3px;
+    background: var(--purple-pale, #f7f1fc);
+    border: 1px solid var(--theme-soft-border, #ddcaed);
+    border-radius: 999px;
+}
+.segmented .seg {
+    background: transparent;
+    color: var(--purple, #5b2a86);
+    border: 0;
+    border-radius: 999px;
+    padding: 7px 15px;
+    font-size: 13px;
+    font-weight: 650;
+}
+.segmented .seg:hover:not(:disabled):not(.on) {
+    background: #ffffffcc;
+    filter: none;
+}
+.segmented .seg.on {
+    background: var(--purple, #5b2a86);
+    color: #fff;
+}
+.segmented .seg:disabled { opacity: .45; cursor: not-allowed; }
+
+/* =======================================================================
+   NAVEGACIÓN Y FORMA DE LOS CONTENEDORES  ·  diseño único (VR1.0)
+   =======================================================================
+   Hasta aquí convivían dos disposiciones que se elegían con un atributo del
+   body. Ya no: hay una sola, la barra lateral, y este bloque es el que la
+   define. Menos código, un solo sitio donde tocar y ninguna pantalla que
+   pueda quedarse a medio camino entre las dos.
+
+   La barra agrupa los apartados por lo que se hace en ellos —datos, horario,
+   sistema—, marca el activo con relleno y franja, y lleva contadores en los
+   apartados que pueden tener trabajo pendiente.
+   ======================================================================= */
+
+.app-shell {
+    display: grid;
+    /* La barra tiene sitio de sobra: los nombres de los apartados caben en una
+       línea, los iconos se leen y el conjunto pesa lo que tiene que pesar en
+       una aplicación cuya navegación se usa constantemente. */
+    grid-template-columns: 268px minmax(0, 1fr);
+    gap: 20px;
+    align-items: start;
+}
+.app-content { min-width: 0; }
+
+.sidenav {
+    position: sticky;
+    top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 14px 11px;
+    background: var(--surface);
+    border: 1px solid var(--theme-card-border, #ebe6ef);
+    border-radius: 16px;
+    box-shadow: 0 5px 18px #3b23500d;
+}
+
+.nav-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.nav-group + .nav-group { margin-top: 10px; }
+
+.nav-title {
+    margin: 0;
+    padding: 10px 12px 6px;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: .11em;
+    text-transform: uppercase;
+    color: var(--muted, #716879);
+}
+
+/* --- Botón de apartado --------------------------------------------------
+   Se apoya en el color del tema, así que cambiar la apariencia en
+   Configuración cambia también la barra sin tocar nada más. */
+.sidenav > .nav-group > button {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 12px 14px;
+    background: transparent;
+    color: var(--text, #292331);
+    border: 0;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    text-align: left;
+    min-height: 48px;
+    position: relative;
+    transition: background .14s ease, color .14s ease;
+}
+.sidenav > .nav-group > button:hover {
+    background: var(--purple-pale, #f7f1fc);
+    color: var(--purple-dark, #402060);
+    filter: none;
+}
+.sidenav > .nav-group > button.active {
+    background: var(--purple, #5b2a86);
+    color: #fff;
+}
+/* Franja a la izquierda del activo: se lee de un vistazo incluso cuando el
+   relleno y el fondo tienen poco contraste en un tema claro. */
+.sidenav > .nav-group > button.active::before {
+    content: '';
+    position: absolute;
+    left: -11px;
+    top: 9px;
+    bottom: 9px;
+    width: 4px;
+    border-radius: 0 3px 3px 0;
+    background: var(--purple, #5b2a86);
+}
+.sidenav > .nav-group > button:focus-visible {
+    outline: 2px solid var(--theme-focus, #b995d5);
+    outline-offset: 1px;
+}
+
+.nav-ic {
+    width: 20px;
+    height: 20px;
+    flex: 0 0 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: .82;
+}
+.sidenav > .nav-group > button.active .nav-ic { opacity: 1; }
+.nav-text { flex: 1; min-width: 0; }
+
+/* --- Contador de pendientes --------------------------------------------
+   Solo aparece cuando hay algo que atender: un cero permanente es ruido. */
+.nav-count {
+    flex: 0 0 auto;
+    min-width: 23px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: var(--purple-light, #e8d9f6);
+    color: var(--purple-dark, #402060);
+    font-size: 12px;
+    font-weight: 700;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+.sidenav > .nav-group > button.active .nav-count {
+    background: #ffffff33;
+    color: #fff;
+}
+.nav-count.alerta {
+    background: var(--danger-bg);
+    color: var(--danger);
+}
+.sidenav > .nav-group > button.active .nav-count.alerta {
+    background: #ffffff33;
+    color: #fff;
+}
+
+/* --- Subapartados de Configuración -------------------------------------- */
+.nav-chevron {
+    width: 14px;
+    height: 14px;
+    flex: 0 0 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: .6;
+    transition: transform .16s ease;
+}
+.sidenav > .nav-group > button[aria-expanded="true"] .nav-chevron {
+    transform: rotate(90deg);
+}
+.nav-sub {
+    display: none;
+    flex-direction: column;
+    gap: 2px;
+    margin: 3px 0 3px 24px;
+    padding-left: 11px;
+    border-left: 1px solid var(--theme-soft-border, #ddcaed);
+}
+.nav-sub.abierto { display: flex; }
+.nav-sub button {
+    background: transparent;
+    color: var(--muted, #716879);
+    border: 0;
+    border-radius: 8px;
+    padding: 9px 11px;
+    font-size: 13.5px;
+    font-weight: 500;
+    text-align: left;
+    min-height: 38px;
+}
+.nav-sub button:hover {
+    background: var(--purple-pale, #f7f1fc);
+    color: var(--purple-dark, #402060);
+    filter: none;
+}
+.nav-sub button.active {
+    color: var(--purple-dark, #402060);
+    font-weight: 650;
+}
+
+/* En ventanas estrechas la barra vuelve a ser una fila, para no comerse el
+   ancho de las tablas. */
+@media (max-width: 1080px) {
+    .app-shell { display: block; }
+    .sidenav {
+        position: static;
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 16px;
+        padding: 10px;
+    }
+    .nav-group { display: contents; }
+    .nav-title, .nav-sub { display: none; }
+    .sidenav > .nav-group > button {
+        width: auto;
+        border: 1px solid var(--theme-border, #cdbbda);
+        padding: 9px 12px;
+    }
+    .sidenav > .nav-group > button.active::before { display: none; }
+}
+
+/* --- Forma de los contenedores -----------------------------------------
+   Caja, franja de color a la izquierda y datos separados por líneas finas. */
+.card {
+    border-radius: 10px;
+    border-left: 4px solid var(--purple, #5b2a86);
+    box-shadow: 0 2px 10px #3b235010;
+}
+.card > .section-head {
+    padding-bottom: 12px;
+    margin-bottom: 14px;
+    border-bottom: 1px solid var(--theme-card-border, #ebe6ef);
+}
+.toolbar.card { border-left-color: var(--purple-mid, #7d4aa8); }
+.guide-card { border-left-width: 4px; }
+.coverage-rule,
+.validation-card,
+.manual-diagnostic-item {
+    border-radius: 8px;
+}
+.coverage-rule-grid > label {
+    padding-bottom: 11px;
+    border-bottom: 1px solid var(--theme-card-border, #ebe6ef);
+}
+.coverage-rule-history li {
+    border-bottom: 1px solid var(--theme-card-border, #ebe6ef);
+}
+.guide-steps > li .guide-step {
+    border-radius: 8px;
+}
+
+
+/* Realce breve del apartado al que lleva el índice de Configuración. */
+.card.destacado {
+    animation: destacar 1.4s ease;
+}
+@keyframes destacar {
+    0%, 100% { box-shadow: 0 5px 18px #3b23500d; }
+    18%, 60% { box-shadow: 0 0 0 3px var(--theme-focus, #b995d5), 0 5px 18px #3b235014; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .card.destacado { animation: none; outline: 3px solid var(--theme-focus, #b995d5); }
+}
+
+/* Cabecera del horario: nombre del día encima del número, como se lee.
+   Antes salía «7 / Lun» y era el número el que mandaba. */
+#tabla-horario thead th .dia-nombre,
+#tabla-horario thead th .dia-numero { display: block; line-height: 1.15; }
+#tabla-horario thead th .dia-nombre { font-size: 11px; font-weight: 600; opacity: .9; }
+#tabla-horario thead th .dia-numero { font-size: 14px; font-weight: 700; }
+
+/* Columnas de totales: nombre completo y, debajo, qué cuentan exactamente. */
+#tabla-horario th.stat-col {
+    min-width: 74px;
+    line-height: 1.2;
+    padding-left: 8px;
+    padding-right: 8px;
+}
+#tabla-horario th.stat-col small {
+    display: block;
+    font-size: 9.5px;
+    font-weight: 400;
+    opacity: .82;
+    white-space: normal;
+}
+/* El texto pequeño de la aplicación es gris; dentro de la cabecera del horario
+   ese gris caía sobre el color de la marca y no se leía. Aquí toma el color de
+   la propia cabecera y se distingue por tamaño y opacidad, no por color. */
+#tabla-horario thead th small { color: inherit; }
+#tabla-horario td.stat-col {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* Recordar la contraseña: opción clara y con su advertencia debajo. */
+.login-recordar {
+    flex-direction: row;
+    align-items: center;
+    gap: 9px;
+    font-weight: 500;
+    font-size: 14px;
+    margin-top: 2px;
+}
+.login-aviso {
+    display: block;
+    margin: -6px 0 2px;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--muted, #716879);
+    text-align: left;
+}
+
+/* ------------------------------------------------------------------
+   V13.2.0 R12f · Paletas listas y control "ver contraseña"
+   ------------------------------------------------------------------ */
+
+/* Paletas prediseñadas.
+   Son muchas, así que se muestran como fichas pequeñas repartidas en dos
+   grupos —las del horario y las que van a juego con el color de la
+   aplicación— dentro de un bloque plegable. Cada ficha enseña siete muestras
+   reales de la paleta; el nombre completo y la descripción aparecen al pasar
+   el ratón, de modo que la sección no se coma la pantalla de configuración. */
+.paletas{
+  margin:2px 0 16px;padding:12px 14px;
+  border:1px solid var(--theme-border,#DDD6E3);border-radius:12px;
+  background:var(--purple-pale,#F6F3F9);
+}
+.paletas-cab{
+  display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;
+  cursor:pointer;list-style:none;
+}
+.paletas-cab::-webkit-details-marker{display:none}
+.paletas-cab::before{
+  content:'▸';margin-right:4px;font-size:11px;color:var(--muted,#716879);
+  transition:transform .15s ease;display:inline-block;
+}
+.paletas[open] .paletas-cab::before{transform:rotate(90deg)}
+.paletas-cab strong{font-size:14px}
+.paletas-cab .muted{font-size:12px;line-height:1.4;color:var(--muted,#716879)}
+.paletas-grupos{display:grid;gap:12px;margin-top:12px}
+.paletas-grupo{display:grid;gap:6px}
+.paletas-titulo{
+  font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--muted,#716879);
+}
+.paletas-lista{
+  display:grid;gap:8px;
+  grid-template-columns:repeat(auto-fill,minmax(132px,1fr));
+}
+button.paleta{
+  display:grid!important;gap:5px;justify-items:stretch;text-align:left!important;
+  width:100%;min-width:0!important;min-height:0!important;
+  padding:7px 8px!important;margin:0!important;
+  background:var(--surface)!important;color:var(--text)!important;
+  border:1px solid var(--theme-border,#DDD6E3)!important;border-radius:9px;
+  transition:border-color .15s ease,box-shadow .15s ease,transform .12s ease;
+}
+button.paleta:hover{
+  filter:none!important;transform:translateY(-1px);
+  border-color:var(--purple-dark,#6A4C93)!important;
+  box-shadow:0 3px 9px rgba(46,39,51,.13);
+}
+button.paleta:focus-visible{outline:2px solid var(--theme-focus,#6A4C93);outline-offset:2px}
+.paleta-nombre{
+  font-size:12px;font-weight:600;line-height:1.25;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.paleta-muestras{
+  display:flex;width:100%;height:16px;border-radius:5px;overflow:hidden;
+  border:1px solid rgba(46,39,51,.14);
+}
+.paleta-muestras i{flex:1 1 0;display:block;min-width:0}
+@media(max-width:520px){
+  .paletas-lista{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}
+}
+
+/* Control "ver contraseña".
+   Antes era un recuadro con borde propio pegado al borde del campo: se leía
+   como un segundo control con su propia caja. Ahora es un icono limpio dentro
+   del campo, sin borde en reposo, que se resalta al pasar por encima y que
+   muestra en color de acento cuando la contraseña está visible. */
+.password-field input{padding-right:44px}
+.password-toggle{
+  right:4px;width:32px!important;height:32px!important;min-height:32px!important;
+  border:1px solid transparent!important;border-radius:8px;
+  color:var(--muted,#716879)!important;background:transparent!important;
+  cursor:pointer;box-shadow:none!important;
+}
+.password-toggle:hover{
+  background:var(--purple-pale,#F1ECF6)!important;
+  color:var(--purple-dark,#6A4C93)!important;
+  filter:none!important;transform:translateY(-50%)!important;
+}
+.password-toggle:active{transform:translateY(-50%) scale(.94)!important}
+.password-toggle[aria-pressed="true"]{
+  color:var(--purple-dark,#6A4C93)!important;
+  background:var(--purple-pale,#F1ECF6)!important;
+  border-color:var(--theme-border,#DDD6E3)!important;
+}
+.password-toggle svg{width:18px;height:18px;transition:opacity .12s ease}
+/* En la lista de usuarios el campo va dentro de una fila con botones: el
+   contenedor del ojo tiene que comportarse como el propio campo. */
+.user-admin-row .user-password-field{display:block;flex:1 1 210px;min-width:200px}
+.user-admin-row .user-password-field input{width:100%;margin:0}
+
+/* Días de otro mes dentro del horario.
+   La primera y la última semana del período pueden empezar en el mes anterior
+   y terminar en el siguiente. Esos días se muestran porque la semana se lee
+   entera, pero llevan su propio color —configurable— y el número de día viene
+   acompañado del mes, para que nadie los confunda con los días del mes en
+   curso. Los heredados del mes anterior ya están publicados y se marcan como
+   bloqueados. */
+#tabla-horario th.otro-mes{
+  background:var(--schedule-otro-mes,#41648C)!important;
+  color:var(--schedule-otro-mes-text,#FFF)!important;
+}
+#tabla-horario th.otro-mes .dia-mes{
+  display:block;font-size:9px;line-height:1.1;letter-spacing:.05em;
+  text-transform:uppercase;opacity:.85;
+}
+/* La celda conserva el color de su turno, que es lo que se lee primero. Antes
+   llevaba además un marco de dos líneas alrededor: con la rejilla nueva eso ya
+   eran cuatro bordes distintos en la misma celda y parecía un error de dibujo.
+   Basta con la cabecera —que sí lleva su color y el nombre del mes— y con que
+   el día se vea más apagado. El punto de la esquina se conserva: señala los
+   días heredados, ya publicados con el mes anterior y no modificables aquí. */
+#tabla-horario td.otro-mes{
+  position:relative;
+}
+#tabla-horario td.otro-mes.heredado::after{
+  content:'';position:absolute;top:3px;right:3px;width:5px;height:5px;
+  border-radius:50%;background:var(--schedule-otro-mes,#41648C);opacity:.75;
+}
+
+/* ------------------------------------------------------------------
+   Pantalla de acceso
+   ------------------------------------------------------------------
+   Todo va en un eje central: marca, título, campos y botón comparten el
+   mismo ancho y la misma línea vertical. No hay saludo —cambia según la
+   hora y no aporta nada—: lo que se lee es qué aplicación es y qué versión,
+   que es lo que alguien necesita confirmar antes de entrar. Los colores
+   salen enteros de las variables del tema, así que la pantalla cambia con
+   el color elegido para la aplicación. */
+.login-overlay{
+  background:
+    radial-gradient(1100px 620px at 50% -10%, color-mix(in srgb, var(--purple) 55%, transparent), transparent 70%),
+    linear-gradient(150deg, var(--purple-dark), var(--purple));
+}
+/* La entrada no lleva tarjeta.
+   Había un recuadro blanco flotando sobre el color, y dentro otro recuadro
+   alrededor del icono: un formulario dentro de otro formulario. Ahora el color
+   de la aplicación ocupa la pantalla entera y encima solo están los campos.
+   Lo único que pesa es el botón «Entrar», en blanco sólido, que es justo lo
+   que hay que pulsar. */
+.login-card{
+  width:min(360px,90vw)!important;
+  gap:14px!important;
+  padding:0!important;
+  background:transparent!important;
+  border:0!important;
+  box-shadow:none!important;
+}
+.login-marca{
+  display:grid;place-items:center;width:auto;height:auto;margin:0 auto 4px;
+  background:transparent;border:0;
+}
+.login-card .login-icon{
+  width:60px!important;height:60px!important;border-radius:0!important;
+  filter:drop-shadow(0 8px 22px rgba(0,0,0,.35));
+}
+/* Sobre el color, el texto y los campos van en blanco: es el mismo criterio
+   que en la cabecera, donde el color de la marca manda sobre el modo. */
+.login-card h2{color:#fff!important}
+.login-card .login-sub{color:#ffffffb8!important}
+.login-card label{color:#ffffffe6!important}
+.login-card input:not([type="checkbox"]),
+.login-card select{
+  background:#ffffff1f!important;
+  border:1px solid #ffffff40!important;
+  color:#fff!important;
+  border-radius:10px!important;
+  backdrop-filter:blur(6px);
+}
+.login-card select option{color:#292331;background:#fff}
+.login-card input::placeholder{color:#ffffff8c}
+.login-card input:not([type="checkbox"]):focus,
+.login-card select:focus{
+  outline:2px solid #ffffff9e!important;
+  border-color:#ffffff9e!important;
+  background:#ffffff2b!important;
+}
+.login-card .password-toggle{color:#ffffffcc!important;background:transparent!important}
+.login-card .login-recordar{color:#fff!important;font-weight:600}
+.login-card .check input[type="checkbox"]{accent-color:#fff}
+.login-card .login-aviso{color:#ffffffa1!important}
+.login-card>button[type="submit"]{
+  background:#fff!important;
+  color:var(--brand-deep,#402060)!important;
+  font-weight:700!important;
+  box-shadow:0 10px 26px rgba(0,0,0,.28);
+}
+.login-card>button[type="submit"]:hover{filter:brightness(.96)}
+.login-card h2{
+  font-size:25px;letter-spacing:-.02em;line-height:1.2;
+}
+.login-card .login-sub{
+  margin:0 0 16px!important;font-size:12.5px;line-height:1.4;
+}
+.login-card label{font-size:13px;font-weight:600;gap:5px}
+.login-card>label,.login-card>.form-alert,.login-card>button,.login-card>small{
+  width:100%!important;max-width:324px;
+}
+.login-card>button{height:44px;font-size:15px;border-radius:10px;margin-top:3px}
+.login-firma{
+  margin:14px 0 0!important;padding-top:12px;width:100%;
+  border-top:1px solid #ffffff2e;
+  font-size:11px;letter-spacing:.03em;color:#ffffff9e;text-align:center;
+}
+.login-firma strong{color:#fff;font-weight:600}
+body[data-app-theme="cablemovil"] .login-marca{
+  width:auto;height:auto;padding:12px 18px;border-radius:14px;
+}
+body[data-app-theme="cablemovil"] .login-card .login-icon{
+  width:min(220px,70vw)!important;height:64px!important;
+}
+
+/* =======================================================================
+   AJUSTES DEL RECORRIDO VISUAL (R13.8)
+   ======================================================================= */
+
+/* --- El turno AM es blanco ---------------------------------------------
+   Al dejar AM en blanco en todas las paletas, la celda desaparecía sobre el
+   fondo de la tabla: no se distinguía un turno de mañana de un hueco. Se le
+   da un borde propio, más marcado que el de la rejilla, para que siga
+   leyéndose como una celda con contenido. */
+td.shift-AM {
+    background: var(--schedule-AM, #fff);
+    box-shadow: inset 0 0 0 1px var(--theme-soft-border, #ddcaed);
+}
+.legend .chip[data-turno="AM"],
+.legend-AM {
+    border: 1px solid var(--theme-border, #cdbbda);
+}
+
+/* --- Primeros pasos: guía, no portada ----------------------------------
+   La tarjeta ocupaba la pantalla entera en todos los apartados y había que
+   desplazarse para llegar al trabajo. Se pliega a un resumen de una línea y
+   se despliega al pulsarla. */
+.guide-card > .guide-steps,
+.guide-card > .guide-dismiss { display: none; }
+.guide-card.abierta > .guide-steps { display: grid; }
+.guide-card.abierta > .guide-dismiss { display: flex; }
+.guide-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 6px;
+    padding: 7px 12px;
+    background: var(--purple-pale, #f7f1fc);
+    color: var(--purple-dark, #402060);
+    border: 1px solid var(--theme-soft-border, #ddcaed);
+    border-radius: 999px;
+    font-size: 12.5px;
+    font-weight: 650;
+}
+.guide-toggle:hover { background: var(--purple-light, #e8d9f6); filter: none; }
+.guide-toggle svg {
+    width: 13px; height: 13px;
+    fill: none; stroke: currentColor; stroke-width: 2;
+    stroke-linecap: round; stroke-linejoin: round;
+    transition: transform .16s ease;
+}
+.guide-card.abierta .guide-toggle svg { transform: rotate(90deg); }
+
+/* --- Casillas de verificación ------------------------------------------
+   La casilla nativa cambia de aspecto en cada sistema y no seguía el color
+   de la aplicación. Se dibuja aquí, con el mismo lenguaje que el resto. */
+input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    margin: 0;
+    padding: 0;
+    background: var(--surface);
+    border: 1.5px solid var(--theme-border, #cdbbda);
+    border-radius: 5px;
+    cursor: pointer;
+    display: inline-grid;
+    place-content: center;
+    transition: background .13s ease, border-color .13s ease;
+}
+input[type="checkbox"]::before {
+    content: '';
+    width: 10px;
+    height: 10px;
+    transform: scale(0);
+    transition: transform .12s ease;
+    box-shadow: inset 1em 1em #fff;
+    clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+}
+input[type="checkbox"]:checked {
+    background: var(--purple, #5b2a86);
+    border-color: var(--purple, #5b2a86);
+}
+input[type="checkbox"]:checked::before { transform: scale(1); }
+input[type="checkbox"]:hover:not(:disabled) { border-color: var(--purple-mid, #7d4aa8); }
+input[type="checkbox"]:focus-visible {
+    outline: 2px solid var(--theme-focus, #b995d5);
+    outline-offset: 2px;
+}
+input[type="checkbox"]:disabled { opacity: .5; cursor: not-allowed; }
+label.check, .weekday-options label {
+    cursor: pointer;
+}
+
+/* --- Botones de acción de las listas ------------------------------------
+   En las tablas de personal y de asignaciones había botones sólidos de
+   colores distintos compitiendo con el contenido. Pasan a botones de
+   contorno: se leen como acciones de fila, no como el asunto principal. */
+.holiday-actions button,
+td .actions button,
+td button.secondary,
+td button:not(.danger-button) {
+    padding: 6px 11px;
+    min-height: 32px;
+    font-size: 12.5px;
+    font-weight: 600;
+    background: var(--surface);
+    color: var(--purple-dark, #402060);
+    border: 1px solid var(--theme-border, #cdbbda);
+    border-radius: 7px;
+}
+td button:not(.danger-button):hover {
+    background: var(--purple-pale, #f7f1fc);
+    border-color: var(--purple-mid, #7d4aa8);
+    filter: none;
+}
+td button.danger-soft,
+td button.danger-button {
+    padding: 6px 11px;
+    min-height: 32px;
+    font-size: 12.5px;
+    background: var(--surface);
+    color: var(--danger, #b42318);
+    border: 1px solid var(--danger-line);
+    border-radius: 7px;
+    font-weight: 600;
+}
+td button.danger-soft:hover,
+td button.danger-button:hover {
+    background: var(--danger-bg);
+    border-color: var(--danger, #b42318);
+    filter: none;
+}
+
+
+/* ==========================================================================
+   V2.3 · Modo claro y modo oscuro
+   ==========================================================================
+
+   Un mismo juego de piezas con dos vestidos. Todo lo que en la aplicación es
+   «una superficie», «un texto apagado» o «un aviso» pasa por una variable, y
+   aquí se dice cuánto vale cada una en cada modo. Así el modo oscuro no es una
+   segunda hoja de estilos que haya que mantener en paralelo —eso es lo que
+   siempre acaba desincronizándose— sino la misma hoja con otros valores.
+
+   Los tonos de la marca —el morado, o el color que se haya elegido— no se
+   fijan aquí: los pone la aplicación al arrancar, calculados a partir del
+   color elegido y del modo, porque el usuario puede cambiarlo sobre la marcha.
+
+   La tabla del horario queda fuera a propósito. Sus colores son los que se
+   configuran para el Excel, y en pantalla tienen que verse exactamente igual
+   que impresos: es una hoja de papel dentro de la aplicación, y esa es su
+   gracia. */
+
+:root {
+    color-scheme: light;
+    /* Superficies, de atrás hacia delante. */
+    --surface: #ffffff;
+    --surface-2: #f7f5f8;
+    --surface-3: #f1eef4;
+    /* Estados. Cada uno con su fondo, su línea y su tinta. */
+    --danger-bg: #fff0ef;
+    --danger-line: #d92d20;
+    --warn-bg: #fff8e8;
+    --warn-line: #f0a000;
+    --ok-bg: #eefaf4;
+    --ok-line: #38a169;
+    --info-bg: #eef8ff;
+    /* Sombras: en claro son una insinuación; en oscuro, casi nada. */
+    --sombra-tarjeta: 0 5px 18px #3b23500d;
+    --sombra-modal: 0 24px 60px #24152f3d;
+    --sombra-flotante: 0 20px 52px #28163726, 0 2px 6px #2816370f;
+    /* Velo de los modales. */
+    --velo: #2b1c3aa8;
+}
+
+:root[data-modo="oscuro"] {
+    color-scheme: dark;
+    /* Ni negro puro ni gris plano: un gris con el matiz de la marca, que es lo
+       que hace que el conjunto parezca elegido y no apagado. */
+    --bg: #141119;
+    --surface: #1c1823;
+    --surface-2: #241f2c;
+    --surface-3: #2c2636;
+    --border: #362f42;
+    --text: #ece8f0;
+    --muted: #a79fb2;
+    /* En oscuro, los avisos no pueden ser pasteles: se apaga el fondo y se
+       aclara la tinta, que es lo contrario de lo que se hace en claro. */
+    --danger: #e08a80;
+    --danger-bg: #2c1b19;
+    --danger-line: #c0564a;
+    --warn: #d9a44f;
+    --warn-bg: #2b2114;
+    --warn-line: #a97f31;
+    --ok: #63c095;
+    --ok-bg: #14291f;
+    --ok-line: #3f8f68;
+    --info-bg: #17222e;
+    --sombra-tarjeta: 0 4px 14px #0000004d;
+    --sombra-modal: 0 24px 60px #00000080;
+    --sombra-flotante: 0 20px 52px #00000073, 0 2px 6px #00000040;
+    --velo: #0b0810cc;
+}
+
+/* Las superficies que la hoja original dejaba en blanco fijo. */
+:root[data-modo="oscuro"] body { background: var(--bg); color: var(--text); }
+:root[data-modo="oscuro"] .card,
+:root[data-modo="oscuro"] .modal-card,
+:root[data-modo="oscuro"] .app-nav,
+:root[data-modo="oscuro"] .toast { box-shadow: var(--sombra-tarjeta); }
+:root[data-modo="oscuro"] .modal-card { box-shadow: var(--sombra-modal); }
+:root[data-modo="oscuro"] .datepicker { box-shadow: var(--sombra-flotante); }
+:root[data-modo="oscuro"] .modal { background: var(--velo); }
+
+/* Campos y desplegables: en oscuro el blanco de fábrica del navegador los
+   deja como agujeros de luz en mitad de la pantalla. */
+:root[data-modo="oscuro"] input,
+:root[data-modo="oscuro"] select,
+:root[data-modo="oscuro"] textarea {
+    background: var(--surface-2);
+    color: var(--text);
+    border-color: var(--border);
+}
+:root[data-modo="oscuro"] input::placeholder,
+:root[data-modo="oscuro"] textarea::placeholder { color: var(--muted); }
+:root[data-modo="oscuro"] option { background: var(--surface-2); color: var(--text); }
+:root[data-modo="oscuro"] input[type="date"]::-webkit-calendar-picker-indicator,
+:root[data-modo="oscuro"] input[type="month"]::-webkit-calendar-picker-indicator {
+    filter: invert(1) brightness(1.6);
+}
+:root[data-modo="oscuro"] input[type="color"] { background: var(--surface-2); }
+
+/* Los estados conservan su significado en cualquier tema, pero sin tintas
+   escritas para fondo claro que desentonen o pierdan contraste en oscuro. */
+:root[data-modo="oscuro"] .coverage-rule-warning,
+:root[data-modo="oscuro"] .row-expired td { color: var(--warn)!important; border-color: var(--warn-line)!important; }
+:root[data-modo="oscuro"] .danger-soft,
+:root[data-modo="oscuro"] .badge-expired { color: var(--danger)!important; border-color: var(--danger-line)!important; }
+:root[data-modo="oscuro"] .alternative-state.official-state,
+:root[data-modo="oscuro"] .partial-status { color: var(--purple-dark)!important; border-color: var(--theme-border)!important; }
+:root[data-modo="oscuro"] .alternative-state.published-state,
+:root[data-modo="oscuro"] .holiday-default { color: var(--ok)!important; border-color: var(--ok-line)!important; }
+
+/* La columna del nombre viaja fija sobre la tabla: necesita fondo propio. */
+:root[data-modo="oscuro"] .employee-name { background: var(--surface); }
+
+/* La tabla del horario conserva sus colores —son los del Excel— así que su
+   texto tiene que seguir siendo oscuro aunque el resto de la aplicación no lo
+   sea. Y se le pone un marco para que no flote sobre el fondo oscuro. */
+:root[data-modo="oscuro"] #tabla-horario td[class*="shift-"],
+:root[data-modo="oscuro"] .schedule-scroll td[class*="shift-"] { color: #292331; }
+:root[data-modo="oscuro"] .scroll,
+:root[data-modo="oscuro"] .schedule-scroll {
+    border-radius: 10px;
+    outline: 1px solid var(--border);
+}
+
+/* Las muestras de color y las fichas de paleta enseñan cómo va a salir el
+   Excel, que siempre es claro: se quedan sobre blanco a propósito. */
+:root[data-modo="oscuro"] .palette-swatches,
+:root[data-modo="oscuro"] .color-code { background: var(--surface); color: #292331; }
+
+/* La cabecera y la pantalla de acceso conservan el degradado de la marca en
+   los dos modos: son la firma de la aplicación, no una superficie más. Se
+   apoyan en tonos propios porque los otros cambian de papel al oscurecer. */
+.topbar {
+    background: linear-gradient(135deg, var(--brand-deep, #402060), var(--brand, #5b2a86));
+}
+.login-overlay {
+    background:
+        radial-gradient(1100px 620px at 50% -10%,
+            color-mix(in srgb, var(--login-end, var(--brand, #5b2a86)) 55%, transparent), transparent 70%),
+        linear-gradient(150deg, var(--login-start, var(--brand-deep, #402060)), var(--login-end, var(--brand, #5b2a86)));
+}
+:root[data-modo="oscuro"] .topbar {
+    background: linear-gradient(135deg, var(--login-start, var(--brand-deep, #402060)), var(--login-end, var(--brand, #5b2a86)));
+    border-bottom: 1px solid #ffffff1a;
+}
+
+/* V2.10 · contraste y superficies coherentes en modo oscuro.  Los colores
+   del horario y del Excel quedan fuera de este bloque deliberadamente: son
+   la codificación operativa que se exporta y no deben cambiar con el tema. */
+:root[data-modo="oscuro"] body {
+    background: var(--bg)!important;
+    color: var(--text)!important;
+}
+:root[data-modo="oscuro"] .login-overlay {
+    background:
+        radial-gradient(1100px 620px at 50% -10%,
+            color-mix(in srgb, var(--login-end) 48%, transparent), transparent 70%),
+        linear-gradient(150deg, var(--login-start), var(--login-end))!important;
+}
+:root[data-modo="oscuro"] .login-card .form-alert {
+    background: color-mix(in srgb, var(--login-end) 26%, var(--surface))!important;
+    border-color: color-mix(in srgb, var(--login-end) 62%, #ffffff)!important;
+    border-left-color: var(--theme-focus)!important;
+    color: #ffffff!important;
+}
+:root[data-modo="oscuro"] .login-card .form-alert strong { color:#ffffff!important; }
+:root[data-modo="oscuro"] .login-card .form-alert span { color:#ffffffd9!important; }
+:root[data-modo="oscuro"] .login-card .form-alert.error {
+    background: color-mix(in srgb, var(--danger) 20%, var(--surface))!important;
+    border-color: var(--danger-line)!important;
+    border-left-color: var(--danger)!important;
+}
+:root[data-modo="oscuro"] .login-card .form-alert.error strong,
+:root[data-modo="oscuro"] .login-card .form-alert.error span { color:var(--danger)!important; }
+:root[data-modo="oscuro"] .login-card select option {
+    background: var(--surface-2)!important;
+    color: var(--text)!important;
+}
+:root[data-modo="oscuro"] .form-alert:not(.error) {
+    background: color-mix(in srgb, var(--brand) 17%, var(--surface))!important;
+    border-color: var(--theme-soft-border)!important;
+    color: var(--text)!important;
+}
+:root[data-modo="oscuro"] .form-alert:not(.error) span { color:var(--muted)!important; }
+:root[data-modo="oscuro"] .guide-step,
+:root[data-modo="oscuro"] .workflow-map > div,
+:root[data-modo="oscuro"] .coverage-rule,
+:root[data-modo="oscuro"] .theme-preview,
+:root[data-modo="oscuro"] .color-grid > label {
+    background: color-mix(in srgb, var(--brand) 10%, var(--surface))!important;
+    border-color: var(--theme-card-border)!important;
+    color: var(--text)!important;
+}
+:root[data-modo="oscuro"] .guide-step strong { color:var(--theme-focus)!important; }
+:root[data-modo="oscuro"] .guide-step span { color:var(--muted)!important; }
+:root[data-modo="oscuro"] .confirm-message { color:var(--text)!important; }
+:root[data-modo="oscuro"] .confirm-detail {
+    background: color-mix(in srgb, var(--brand) 9%, var(--surface-2))!important;
+    color:var(--muted)!important;
+    border-color:var(--border)!important;
+}
+:root[data-modo="oscuro"] .export-path {
+    background: color-mix(in srgb, var(--brand) 13%, var(--surface-2))!important;
+    color:var(--text)!important;
+    border-color:var(--theme-border)!important;
+}
+:root[data-modo="oscuro"] .path-item code { color:var(--muted)!important; }
+:root[data-modo="oscuro"] footer { color:var(--muted)!important; }
+:root[data-modo="oscuro"] .coverage-rule-warning {
+    background: color-mix(in srgb, var(--warn) 17%, var(--surface))!important;
+    border-color:var(--warn-line)!important;
+    color:var(--warn)!important;
+}
+:root[data-modo="oscuro"] .partial-status {
+    background: color-mix(in srgb, var(--brand) 14%, var(--surface))!important;
+    border-color:var(--theme-border)!important;
+    color:var(--text)!important;
+}
+:root[data-modo="oscuro"] .activity-pill.success {
+    background:var(--ok-bg)!important; border-color:var(--ok-line)!important; color:var(--ok)!important;
+}
+:root[data-modo="oscuro"] .activity-pill.error {
+    background:var(--danger-bg)!important; border-color:var(--danger-line)!important; color:var(--danger)!important;
+}
+:root[data-modo="oscuro"] .activity-pill.warning {
+    background:var(--warn-bg)!important; border-color:var(--warn-line)!important; color:var(--warn)!important;
+}
+:root[data-modo="oscuro"] .manual-locked-note,
+:root[data-modo="oscuro"] .rule-group-heading,
+:root[data-modo="oscuro"] .paletas,
+:root[data-modo="oscuro"] .session-help {
+    background: color-mix(in srgb, var(--brand) 10%, var(--surface-2))!important;
+    color:var(--text)!important;
+    border-color:var(--theme-border)!important;
+}
+:root[data-modo="oscuro"] .rule-group-heading small,
+:root[data-modo="oscuro"] .session-help small { color:var(--muted)!important; }
+
+/* El selector de apariencia: tres opciones y se ve cuál está puesta. */
+.modo-app {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.modo-app button {
+    flex: 1 1 130px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 46px;
+    padding: 9px 14px;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--theme-border, #cdbbda);
+    border-radius: 10px;
+    font-weight: 620;
+}
+.modo-app button:hover { background: var(--purple-pale); filter: none; }
+.modo-app button.active {
+    background: var(--purple-pale);
+    border-color: var(--purple-mid, #7d4aa8);
+    box-shadow: inset 0 0 0 1px var(--purple-mid, #7d4aa8);
+    color: var(--purple-dark, #402060);
+}
+.modo-app svg {
+    width: 18px; height: 18px; flex: 0 0 18px;
+    fill: none; stroke: currentColor; stroke-width: 1.8;
+    stroke-linecap: round; stroke-linejoin: round;
+}
+.modo-app-nota { margin-top: 8px; }
+
+/* Las muestras de turno —la leyenda, las fichas de paleta, la vista previa del
+   color— enseñan cómo va a salir el Excel, que siempre es claro. Se quedan con
+   su color, y por eso su texto tiene que seguir siendo oscuro. */
+:root[data-modo="oscuro"] .chip.shift-AM,
+:root[data-modo="oscuro"] .chip.shift-PM,
+:root[data-modo="oscuro"] .chip.shift-D,
+:root[data-modo="oscuro"] .chip[class*="shift-ADM"],
+:root[data-modo="oscuro"] .holiday-chip { color: #292331; }
+:root[data-modo="oscuro"] .legend .chip { box-shadow: inset 0 0 0 1px #ffffff2e; }
+
+/* Un botón deshabilitado en claro se apaga bajando la opacidad; sobre fondo
+   oscuro eso lo hace desaparecer. Aquí se apaga cambiándole el color, que es
+   lo que de verdad dice «ahora no». */
+:root[data-modo="oscuro"] button:disabled,
+:root[data-modo="oscuro"] button[disabled] {
+    opacity: 1;
+    background: var(--surface-3);
+    color: var(--muted);
+    border-color: var(--border);
+    box-shadow: none;
+}
+
+/* El logotipo de CABLEMOVIL lleva la palabra en azul marino. La regla es
+   sencilla: si cae sobre el azul de la marca, va en blanco entero —marca y
+   palabra—, porque ahí su propio color desaparece.
+   ·  La pantalla de acceso es el fondo de la marca en los dos modos, así que
+      ahí va blanco siempre.
+   ·  En la cabecera, en claro tiene detrás su pastilla clara y se lee tal
+      cual; en oscuro la pastilla sobra y el blanco se sostiene solo. */
+body[data-app-theme="cablemovil"] .login-icon,
+:root[data-modo="oscuro"] body[data-app-theme="cablemovil"] .brand-mark img {
+    filter: brightness(0) invert(1) !important;
+}
+:root[data-modo="oscuro"] body[data-app-theme="cablemovil"] .brand-mark {
+    background: transparent !important;
+    border-color: #ffffff2b !important;
+    box-shadow: none !important;
+    backdrop-filter: none;
+}
+
+
+/* Sugerencias de Validación: el gris estaba escrito a mano y en modo oscuro
+   caía sobre fondo oscuro. Toma el gris del tema, que sí cambia con el modo. */
+.validation-card .suggestion{ color: var(--muted, #5d5263) !important; }
+.validation-card.info.applied strong{ color: var(--brand, #5b2a86) !important; }
+
+
+/* La rejilla del horario se define más abajo, en «V2.8 · El horario, otra vez».
+   Aquí estuvo la primera versión: todos los bordes en negro sólido. Resolvió el
+   problema —no se podía seguir una fila— pero dejó una red de líneas iguales
+   por todas partes, compitiendo con el color del turno. Se sustituyó por una
+   rejilla fina que solo marca el principio de cada semana. */
+
+
+/* ==========================================================================
+   V2.7 · Listas y avisos de acceso
+   ==========================================================================
+
+   Las listas del programa —personal, solicitudes, asignaciones, historial,
+   festivos— se dibujaban con la misma plantilla que el horario: cabecera de
+   color fuerte, rejilla vertical en cada columna, texto centrado y filas
+   apretadas. En el horario eso tiene sentido, porque es una cuadrícula de
+   días; en una lista no, porque lo que se lee es una fila de principio a fin.
+   Además la cabecera tomaba el color del horario/Excel, así que al elegir una
+   paleta de exportación cambiaba de color media aplicación.
+
+   Aquí las listas pasan a leerse como listas: marco propio, cabecera sobria
+   ligada al color de la aplicación (no al del horario), texto alineado a la
+   izquierda, líneas solo entre filas y aire suficiente para distinguir una
+   fila de la siguiente.
+   ---------------------------------------------------------------------- */
+
+.scroll.lista{
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:var(--surface);
+  box-shadow:inset 0 0 0 1px #ffffff00;
+}
+
+.data-table{font-size:13.5px}
+
+/* Cabecera: sobria, ligada al color de la aplicación. */
+.data-table thead th{
+  background:var(--surface-2)!important;
+  color:var(--text)!important;
+  text-align:left;
+  font-size:11.5px;
+  font-weight:700;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  height:auto;
+  padding:10px 11px;
+  border-right:0!important;
+  border-bottom:1px solid var(--border)!important;
+  box-shadow:inset 0 -2px 0 var(--purple-light);
+  /* Los rótulos pueden partirse en dos renglones: una cabecera de dos líneas
+     ocupa menos que una lista que se sale de la tarjeta. */
+  white-space:normal;
+  vertical-align:bottom;
+}
+.data-table thead th:first-child{border-top-left-radius:11px;white-space:nowrap}
+.data-table thead th:last-child{border-top-right-radius:11px}
+
+/* Filas: sin rejilla vertical, con aire y una única línea de separación. */
+.data-table tbody td{
+  text-align:left;
+  padding:11px 11px;
+  border-right:0!important;
+  border-bottom:1px solid var(--border);
+  vertical-align:middle;
+  line-height:1.45;
+}
+.data-table tbody tr:last-child td{border-bottom:0}
+.data-table tbody tr:hover td{background:var(--purple-pale)}
+.data-table tbody td:first-child{font-weight:650;color:var(--text)}
+.data-table .group-count{margin-top:2px;font-weight:500;color:var(--muted)}
+
+/* Fila vacía: un mensaje centrado, no una celda suelta pegada al margen. */
+.data-table tbody td[colspan]{
+  text-align:center;
+  color:var(--muted);
+  font-weight:500;
+  padding:28px 14px;
+}
+
+/* Acciones: siempre en una sola fila, a la derecha, con el mismo alto. */
+.data-table td.table-actions{
+  text-align:right!important;
+  white-space:nowrap!important;
+  padding:9px 12px!important;
+  background:var(--surface);
+  box-shadow:-8px 0 10px -10px #24163526;
+}
+.data-table tr:hover td.table-actions{background:var(--purple-pale)}
+.data-table thead th:last-child{text-align:right}
+.data-table td.table-actions button{
+  margin:0 0 0 5px!important;
+  min-height:32px;
+  height:32px;
+  padding:6px 10px!important;
+  font-size:12.5px;
+}
+.data-table td.table-actions button:first-child{margin-left:0!important}
+
+/* Fila apagada (retirados, vencidos): se distingue por la tinta, no por un
+   fondo que compita con el de la fila que tiene el ratón encima. */
+.data-table tr.employee-inactive td,
+.data-table tr.row-expired td{background:transparent;color:var(--muted)}
+.data-table tr.employee-inactive:hover td,
+.data-table tr.row-expired:hover td{background:var(--purple-pale)!important}
+.data-table tr.employee-inactive td:first-child{font-weight:600}
+
+/* En pantallas estrechas la columna de acciones deja de estar fijada: con
+   poco ancho tapaba el contenido en lugar de ayudar. */
+@media(max-width:820px){
+  .data-table td.table-actions{position:static!important;box-shadow:none;white-space:normal!important;text-align:left!important}
+  .data-table thead th:last-child{position:static!important;text-align:left}
+  .data-table td.table-actions button{margin:3px 6px 3px 0!important}
+}
+
+/* Avisos de formulario y de acceso.
+   El de la pantalla de entrada no tenía estilo propio: salía como un bloque
+   rojo de error para decir algo que no es un error, solo que hay que volver a
+   entrar. Ahora es un aviso tranquilo, con el color de la aplicación, y el
+   rojo se reserva para lo que de verdad ha fallado. */
+.form-alert{
+  border:1px solid var(--theme-soft-border);
+  border-left:4px solid var(--purple-mid);
+  border-radius:11px;
+  background:var(--purple-pale);
+  color:var(--text);
+  padding:12px 14px;
+  gap:2px;
+  line-height:1.45;
+}
+.form-alert strong{font-size:13.5px;font-weight:700}
+.form-alert span{font-size:13px;color:var(--muted)}
+.form-alert.error{
+  border-color:var(--danger-line);
+  border-left-color:var(--danger);
+  background:var(--danger-bg);
+}
+.form-alert.error strong{color:var(--danger)}
+#login-alerta{margin-top:2px}
+
+/* Una lista con nueve columnas no cabe estrujada: el navegador partía los
+   nombres en tres renglones y las etiquetas de estado se salían de su celda,
+   por debajo de la columna de acciones. Cada columna toma el ancho que pide su
+   contenido y, si al final no cabe, se desplaza la lista —que para eso la
+   columna de acciones va fijada a la derecha. */
+.data-table{width:100%}
+/* La primera columna lleva el nombre: se le reserva sitio para que quepa de
+   una vez y no se parta en tres renglones, pero se le deja partirse cuando lo
+   que hay es una etiqueta larga de grupo. */
+.data-table td:first-child,.data-table th:first-child{max-width:420px;min-width:210px;white-space:normal}
+.data-table td .badge,.data-table td .chip{white-space:nowrap}
+.data-table td.audit-detail{white-space:normal;min-width:320px;max-width:520px}
+.data-table td[colspan]{white-space:normal}
+.scroll.lista{overflow:auto}
+
+
+/* ==========================================================================
+   V2.8 · El mes que se está programando
+   ==========================================================================
+
+   Solicitudes y Asignaciones trabajaban sobre una lista única: todo lo que se
+   hubiera registrado nunca, junto, sin decir de qué mes era cada cosa. A los
+   pocos meses eso deja de ser una lista y pasa a ser un montón.
+
+   Ahora cada una de esas pantallas empieza diciendo sobre qué mes se está
+   trabajando, con las flechas para moverse y el rango de días que abarca —que
+   son las semanas completas del horario, no del 1 al 30—. Es la misma barra en
+   las dos, y es lo primero que se ve: si algo no aparece en la lista, ya se
+   sabe dónde mirar.
+   ---------------------------------------------------------------------- */
+
+.periodo-bar{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  margin-bottom:16px;
+  padding:12px 16px;
+  background:var(--surface);
+  border:1px solid var(--theme-card-border);
+  border-left:4px solid var(--purple);
+  border-radius:14px;
+  box-shadow:var(--sombra-tarjeta);
+}
+.periodo-bar-texto{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.periodo-bar-texto strong{
+  font-size:17px;
+  line-height:1.2;
+  color:var(--purple-dark);
+}
+.periodo-bar-texto small{color:var(--muted);line-height:1.35}
+.periodo-paso{
+  width:36px;
+  min-width:36px;
+  height:36px;
+  padding:0!important;
+  display:grid;
+  place-items:center;
+  font-size:20px;
+  line-height:1;
+  background:var(--purple-pale);
+  color:var(--purple-dark);
+  border:1px solid var(--theme-soft-border);
+  border-radius:9px;
+}
+.periodo-paso:hover:not(:disabled){background:var(--purple-light);filter:none}
+.periodo-bar .periodo-todos{
+  flex-direction:row;
+  align-items:center;
+  gap:8px;
+  min-height:0;
+  margin:0;
+  font-size:13px;
+  font-weight:600;
+  color:var(--muted);
+  white-space:nowrap;
+}
+/* Mirando el histórico, la barra se apaga: deja claro que eso es una consulta
+   y no el modo en el que se registra nada. */
+.periodo-bar.viendo-todo{
+  border-left-color:var(--muted);
+  background:var(--surface-2);
+}
+.periodo-bar.viendo-todo .periodo-bar-texto strong{color:var(--text)}
+
+.nota-otros-meses{
+  margin:0 0 12px;
+  padding:10px 13px;
+  border-radius:10px;
+  background:var(--purple-pale);
+  border:1px solid var(--theme-soft-border);
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.45;
+}
+
+@media(max-width:720px){
+  .periodo-bar{flex-wrap:wrap}
+  .periodo-bar .periodo-todos{width:100%;order:3}
+}
+
+
+/* ==========================================================================
+   V2.8 · El horario, otra vez
+   ==========================================================================
+
+   La rejilla negra que se pidió antes resolvió el problema de fondo —no se
+   podía seguir una fila— pero creó otro: una red de líneas igual de fuertes
+   por todas partes, compitiendo con el color del turno, que es lo que de
+   verdad hay que leer.
+
+   La idea de este rediseño es que la rejilla diga algo. Un horario se lee por
+   semanas, así que la única división marcada es la del domingo al lunes: se ve
+   el bloque de cada semana de un golpe de vista. Dentro de la semana, las
+   líneas son finas y neutras, del color de la tinta rebajado, que se sostiene
+   igual sobre una celda blanca que sobre una lila o una verde. Y la fila
+   completa se sigue por el color, no por la línea: al pasar por encima se
+   ilumina entera.
+   ---------------------------------------------------------------------- */
+
+:root{
+  /* Una tinta de rejilla, no un negro: sobre los colores pastel del turno el
+     negro puro hace de reja y el color deja de leerse. */
+  --rejilla:#0000002e;
+  --rejilla-fuerte:#00000059;
+  --rejilla-marco:#00000073;
+}
+:root[data-modo="oscuro"]{
+  --rejilla:#ffffff26;
+  --rejilla-fuerte:#ffffff4d;
+  --rejilla-marco:#ffffff66;
+}
+
+#tabla-horario th,
+#tabla-horario td{
+  border-right:1px solid var(--rejilla)!important;
+  border-bottom:1px solid var(--rejilla)!important;
+}
+#tabla-horario{
+  border-top:1px solid var(--rejilla-marco);
+  border-left:1px solid var(--rejilla-marco);
+  border-radius:10px;
+}
+/* El lunes abre semana: línea marcada a su izquierda, en la cabecera y en
+   todas las celdas de esa columna. */
+#tabla-horario th.semana-inicio,
+#tabla-horario td.semana-inicio{
+  border-left:2px solid var(--rejilla-fuerte)!important;
+}
+#tabla-horario thead th{border-bottom:2px solid var(--rejilla-marco)!important}
+/* Los datos de la izquierda —nombre, área, base— y las estadísticas de la
+   derecha no son días: se separan del calendario con su propia línea. */
+#tabla-horario thead th:nth-child(3),
+#tabla-horario tbody td:nth-child(3){border-right:2px solid var(--rejilla-fuerte)!important}
+#tabla-horario th.stat-col:first-of-type,
+#tabla-horario td.stat-col:first-of-type{border-left:2px solid var(--rejilla-fuerte)!important}
+
+/* Cabecera de los días: el día de la semana pequeño y en mayúsculas, el número
+   grande y en cifras de ancho fijo, para que la fila de fechas quede alineada
+   como un calendario y no como un texto. */
+#tabla-horario thead th{
+  padding:7px 6px;
+  vertical-align:bottom;
+  line-height:1.15;
+}
+/* Todas las fechas ocupan exactamente la misma columna, aunque el texto del
+   día, el mes heredado o la sigla del turno tengan longitudes distintas. */
+#tabla-horario thead th[data-fecha],
+#tabla-horario tbody td.dia-turno{
+  width:62px;
+  min-width:62px;
+  max-width:62px;
+}
+#tabla-horario thead th[data-fecha]{height:57px}
+#tabla-horario tbody td.dia-turno{height:38px}
+#tabla-horario .dia-nombre{
+  display:block;
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  opacity:.82;
+}
+#tabla-horario .dia-numero{
+  display:block;
+  font-size:15px;
+  font-weight:700;
+  font-variant-numeric:tabular-nums;
+  margin-top:1px;
+}
+#tabla-horario .dia-mes{
+  display:block;
+  font-size:9.5px;
+  font-weight:600;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+  opacity:.72;
+}
+
+/* Celdas del turno: la sigla centrada, con cifras y letras de ancho fijo para
+   que las columnas queden a plomo. */
+#tabla-horario tbody td{
+  padding:7px 6px;
+  font-weight:650;
+  font-variant-numeric:tabular-nums;
+  letter-spacing:.01em;
+}
+/* Un descanso no es un turno: se dice, pero sin gritar. */
+#tabla-horario td.shift-D{font-weight:600;opacity:.9}
+/* Los días de otro mes están ahí para dar continuidad, no para trabajarlos. */
+#tabla-horario td.otro-mes{opacity:.62}
+
+/* Seguir la fila: al pasar por encima se ilumina entera, incluido el nombre,
+   que va fijado a la izquierda. Es lo que sustituye a la reja negra. */
+#tabla-horario tbody tr:hover td{box-shadow:inset 0 0 0 999px #5b2a860f}
+:root[data-modo="oscuro"] #tabla-horario tbody tr:hover td{box-shadow:inset 0 0 0 999px #ffffff12}
+#tabla-horario .employee-name{
+  box-shadow:2px 0 0 var(--rejilla-fuerte);
+  padding-left:11px;
+}
+#tabla-horario tbody tr:hover .employee-name{
+  box-shadow:2px 0 0 var(--rejilla-fuerte), inset 0 0 0 999px #5b2a860f;
+}
+:root[data-modo="oscuro"] #tabla-horario tbody tr:hover .employee-name{
+  box-shadow:2px 0 0 var(--rejilla-fuerte), inset 0 0 0 999px #ffffff12;
+}
+
+/* Las columnas de estadísticas son cuentas, no turnos: se apartan del bloque
+   de días con un fondo neutro para que no se confundan con el calendario. */
+#tabla-horario td.stat-col{
+  background:var(--surface-2);
+  font-weight:600;
+  color:var(--muted);
+}
+#tabla-horario td.stat-periodo{color:var(--text);font-weight:700}
+#tabla-horario tbody tr:hover td.stat-col{background:var(--surface-2)}
+
+
+/* Ayuda plegada.
+   Las dos pantallas empezaban con un párrafo largo explicando estados,
+   trazabilidad y excepciones. Eso hay que poder consultarlo, pero no hace
+   falta leerlo cada vez que se entra a registrar un permiso: va plegado, con
+   un título que dice qué hay dentro. */
+.ayuda-plegable{
+  margin:0 0 16px;
+  border:1px solid var(--theme-soft-border);
+  border-radius:11px;
+  background:var(--purple-pale);
+  overflow:hidden;
+}
+.ayuda-plegable>summary{
+  cursor:pointer;
+  padding:11px 15px;
+  font-size:13.5px;
+  font-weight:650;
+  color:var(--purple-dark);
+  list-style:none;
+  display:flex;
+  align-items:center;
+  gap:9px;
+}
+.ayuda-plegable>summary::-webkit-details-marker{display:none}
+.ayuda-plegable>summary::before{
+  content:"";
+  width:0;height:0;
+  border-left:6px solid currentColor;
+  border-top:4.5px solid transparent;
+  border-bottom:4.5px solid transparent;
+  transition:transform .16s ease;
+  flex:0 0 auto;
+}
+.ayuda-plegable[open]>summary::before{transform:rotate(90deg)}
+.ayuda-plegable>summary:hover{background:var(--purple-light)}
+.ayuda-plegable>summary:focus-visible{outline:2px solid var(--theme-focus);outline-offset:-2px}
+.ayuda-plegable p{
+  margin:0;
+  padding:0 15px 13px;
+  font-size:13.5px;
+  line-height:1.55;
+  color:var(--text);
+}
+.ayuda-plegable p+p{padding-top:0}
+
+/* Los botones del encabezado de una tarjeta van en una fila que se envuelve,
+   no en una columna: apilados ocupaban tres renglones y parecían tres pasos
+   de algo cuando son tres acciones sueltas. */
+.section-head .head-actions{
+  flex-direction:row;
+  flex-wrap:wrap;
+  align-items:center;
+  justify-content:flex-end;
+  gap:8px;
+  max-width:min(620px,52%);
+}
+.section-head .head-actions button{
+  flex:0 0 auto;
+  min-height:36px!important;
+  height:36px!important;
+  padding:6px 13px!important;
+  font-size:13px;
+}
+@media(max-width:900px){
+  .section-head .head-actions{max-width:100%;justify-content:flex-start}
+}
+
+/* Un campo que solo enseña lo que ya está decidido arriba: se ve, se entiende,
+   pero no invita a tocarlo. */
+.campo-fijado{
+  background:var(--surface-2)!important;
+  color:var(--muted)!important;
+  cursor:default;
+}
+
+
+/* ==========================================================================
+   V2.9 · Configuración por grupos, y lo informativo plegado
+   ==========================================================================
+
+   Configuración eran once apartados en una misma página: para llegar a los
+   festivos había que pasar por delante del restablecimiento de fábrica. Ahora
+   se agrupa por lo que la persona ha venido a hacer y se enseña un grupo cada
+   vez. La barra de arriba dice qué hay en cada uno, para no tener que abrirlos
+   para averiguarlo.
+   ---------------------------------------------------------------------- */
+
+.cfg-grupos{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
+  gap:10px;
+  margin-bottom:18px;
+}
+.cfg-grupo-boton{
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+  align-items:flex-start;
+  text-align:left;
+  padding:13px 15px!important;
+  background:var(--surface);
+  color:var(--text);
+  border:1px solid var(--theme-card-border);
+  border-radius:12px;
+  box-shadow:var(--sombra-tarjeta);
+  min-height:0!important;
+  height:auto!important;
+}
+.cfg-grupo-boton strong{font-size:14.5px;font-weight:700;line-height:1.25}
+.cfg-grupo-boton span{
+  font-size:12.5px;
+  font-weight:400;
+  line-height:1.4;
+  color:var(--muted);
+}
+.cfg-grupo-boton:hover{border-color:var(--purple-mid);filter:none}
+.cfg-grupo-boton.active{
+  background:var(--purple-pale);
+  border-color:var(--purple);
+  box-shadow:inset 3px 0 0 var(--purple), var(--sombra-tarjeta);
+}
+.cfg-grupo-boton.active strong{color:var(--purple-dark)}
+.cfg-grupo-boton:focus-visible{outline:2px solid var(--theme-focus);outline-offset:2px}
+
+/* La fila de usuarios: nombre a la izquierda, y el campo con sus dos botones
+   en una fila que se envuelve. Antes era una rejilla de cuatro columnas fijas
+   y el campo de contraseña, más ancho que su columna, se salía por encima del
+   botón de al lado. */
+.user-admin-row .user-admin-main{flex:1 1 200px;min-width:170px}
+.user-admin-row .user-password-field{flex:1 1 220px;min-width:180px;max-width:320px}
+.user-admin-row>button{flex:0 0 auto}
+
+/* Una fila de la lista que pertenece a otro mes: se ve, pero apagada. */
+.data-table tr.de-otro-mes td{color:var(--muted)}
+.data-table tr.de-otro-mes td:first-child{font-weight:600}
+
+/* Tramos dentro de un formulario largo.
+   Ocupan la fila entera de la rejilla y separan «quién», «cuándo» y «para
+   dejar constancia». Es la diferencia entre doce campos seguidos y tres
+   preguntas cortas. */
+.form-paso{
+  grid-column:1/-1;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  margin:6px 0 -2px;
+  padding-top:14px;
+  border-top:1px solid var(--border);
+}
+.form-paso:first-child{margin-top:0;padding-top:0;border-top:0}
+.form-paso strong{
+  font-size:11.5px;
+  font-weight:700;
+  letter-spacing:.07em;
+  text-transform:uppercase;
+  color: var(--purple-tinta, var(--purple));
+}
+.form-paso span{font-size:12.5px;color:var(--muted);line-height:1.4}
+
+/* R2.11 · acabado final del horario.
+   Las celdas AM son blancas por definición y no necesitan un marco interior:
+   deben compartir exactamente el mismo divisor que PM. El resaltado de fila
+   usa el color principal del tema, nunca un morado fijo, y la separación entre
+   semanas se dibuja como una única línea vertical limpia. */
+#tabla-horario td.shift-AM {
+  box-shadow: none!important;
+}
+#tabla-horario tbody tr:hover td {
+  box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--brand) 10%, transparent)!important;
+}
+#tabla-horario tbody tr:hover .employee-name {
+  box-shadow: 2px 0 0 var(--rejilla-fuerte),
+              inset 0 0 0 999px color-mix(in srgb, var(--brand) 10%, transparent)!important;
+}
+#tabla-horario th.semana-inicio,
+#tabla-horario td.semana-inicio {
+  border-left: 3px solid color-mix(in srgb, var(--brand) 52%, var(--rejilla-fuerte))!important;
+}
+
+/* R2.12 · responsividad medida sobre el área útil.
+   La barra lateral reduce bastante el ancho real del contenido; los cortes
+   anteriores miraban únicamente el viewport y todavía intentaban dibujar
+   cinco columnas dentro de una tarjeta de unos 900 px. Eso hacía que algunos
+   selects largos y el botón de reprogramación tocaran o cruzaran el borde. */
+.direct-form > label,
+.partial-controls > label,
+.direct-form select,
+.partial-controls select,
+.direct-form input,
+.partial-controls input,
+.direct-form textarea,
+.partial-controls textarea,
+.partial-actions,
+.partial-actions button {
+  min-width:0!important;
+  max-width:100%;
+}
+@media(max-width:1500px){
+  .partial-controls{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  }
+}
+@media(max-width:1200px){
+  .direct-form{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  }
+}
+@media(max-width:760px){
+  .direct-form,.partial-controls{
+    grid-template-columns:1fr!important;
+  }
+}
+
+/* En oscuro, incluso los componentes menos frecuentes heredan una superficie
+   tintada por el tema. Se excluye de forma expresa la cuadrícula del horario,
+   cuyas celdas deben conservar los colores del Excel. */
+:root[data-modo="oscuro"] .segmented,
+:root[data-modo="oscuro"] .week-locks-card,
+:root[data-modo="oscuro"] .area-update-card,
+:root[data-modo="oscuro"] .periodo-bar,
+:root[data-modo="oscuro"] .validation-summary,
+:root[data-modo="oscuro"] .alternatives-panel,
+:root[data-modo="oscuro"] .security-panel,
+:root[data-modo="oscuro"] .panel-check {
+  background:color-mix(in srgb,var(--brand) 9%,var(--surface-2))!important;
+  border-color:var(--theme-card-border)!important;
+  color:var(--text)!important;
+}
+:root[data-modo="oscuro"] .segmented .seg:hover:not(:disabled):not(.on){
+  background:color-mix(in srgb,var(--brand) 18%,var(--surface-2))!important;
+}
+
+/* Estas descripciones usaban una variable antigua (--text-muted) que ya no
+   existe. En claro caían en un gris aceptable por casualidad; en oscuro ese
+   mismo gris quedaba por debajo del contraste mínimo. */
+.rule-user-card p{
+  color:var(--muted)!important;
+}
+
+/* El contador puede crecer ("Retirados (12)"). La cápsula se adapta y, si el
+   ancho útil es pequeño, reparte sus dos opciones sin que el texto atraviese
+   el borde redondeado. */
+.segmented{
+  flex-wrap:wrap;
+  width:max-content;
+  max-width:100%;
+}
+.segmented .seg{
+  flex:1 1 auto;
+  min-width:0;
+}
+.section-head>.head-actions{
+  flex:0 0 auto!important;
+  width:auto;
+  max-width:100%;
+}
+
+
+/* ==========================================================================
+   V3.0 · Que todo se lea, con cualquier tema y en los dos modos
+   ==========================================================================
+
+   Una revisión midiendo el contraste real de cada texto contra su fondo —los
+   ocho temas, en claro y en oscuro— encontró cuatro sitios donde el color
+   estaba escrito a mano y no seguía al tema. En modo oscuro quedaban por
+   debajo de 2,5 de contraste: técnicamente visibles, en la práctica ilegibles.
+   ---------------------------------------------------------------------- */
+
+/* El estado de cada área llevaba un verde y un ámbar fijos, pensados para
+   fondo blanco. Ahora usan los colores de estado del tema, que sí cambian con
+   el modo. */
+.area-status.ok{color:var(--ok)!important}
+.area-status.pending{color:var(--warn)!important}
+
+/* El interruptor de vista se apoya en el tono pálido de la marca, que en
+   oscuro es casi el fondo: la opción no elegida se leía en 2,1. La tinta
+   normal siempre contrasta con su propia superficie. */
+.segmented .seg{color:var(--text)}
+.segmented .seg.on{background: var(--purple-tinta, var(--purple));color:var(--surface)}
+:root[data-modo="oscuro"] .segmented .seg.on{color:var(--bg)}
+.segmented .seg:hover:not(:disabled):not(.on){background:var(--surface);color:var(--text)}
+:root[data-modo="oscuro"] .segmented .seg:hover:not(:disabled):not(.on){background:var(--surface-3)}
+
+/* Los títulos de los tramos de un formulario iban con el color de marca. Con
+   una marca muy oscura —el azul marino institucional— quedaban casi del color
+   del fondo. El tono de marca ya se aclara solo hasta que se lee; aquí se
+   asegura además que nunca quede por debajo de la tinta apagada. */
+.form-paso strong{color:var(--purple-dark)}
+:root[data-modo="oscuro"] .form-paso strong{color:var(--purple-dark)}
+
+/* Las muestras de color del Excel se quedan sobre blanco a propósito —enseñan
+   cómo saldrá el archivo— pero el código hexadecimal debajo es texto de la
+   aplicación y va con su tinta. */
+:root[data-modo="oscuro"] .color-code{background:transparent;color:var(--muted)}
+
+/* Los botones de acción destructiva usan el rojo de aviso como fondo. En modo
+   oscuro ese rojo se aclara —para servir de tinta sobre fondos oscuros— y el
+   texto blanco encima se quedaba en 2,6 de contraste. Aquí el fondo vuelve a
+   ser un rojo hondo y la letra clara, que es como se lee un botón. */
+:root[data-modo="oscuro"] .danger-button,
+:root[data-modo="oscuro"] button.danger-button{
+  background:#7d2b23;
+  color:#ffe9e6;
+  border-color:#a34b40;
+}
+:root[data-modo="oscuro"] .danger-button:hover,
+:root[data-modo="oscuro"] button.danger-button:hover{
+  background:#94342a;
+  filter:none;
+}
+
+
+
+/* El verde de «ya es el horario oficial» y «ya está publicado».
+   No es decorativo: es un estado, y lleva letra blanca encima. El tono que
+   tenía antes (#6c8f79) dejaba esa letra en 3,6 de contraste, que se lee en una
+   pantalla buena y no en la de una oficina con luz de ventana. Oscurecido lo
+   justo para pasar de 4,5 sin dejar de ser el mismo verde. */

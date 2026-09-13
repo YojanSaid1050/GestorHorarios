@@ -1,0 +1,36 @@
+# La plantilla de verdad de la oficina: nombres, horarios y las reglas sobre
+# personas concretas. Este repositorio es público y esto no puede entrar en él
+# **nunca**. Viaja aparte, en un secreto del repositorio que el empaquetado
+# aplica al construir, para que el instalador que llega a la oficina siga
+# trayendo su gente. Lo que está escrito en el repositorio son dieciocho
+# personas inventadas.
+#
+# Una vez empujado a un repositorio público, borrarlo después no lo deshace:
+# queda en el historial de git y en las copias que ya se hayan hecho.
+nomina/
+
+# El permiso de lectura con el que el programa instalado busca versiones
+# nuevas. Lo escribe el empaquetado a partir de un secreto del repositorio, y
+# es lo único de todo el proyecto que no puede quedar escrito en git.
+permiso_actualizaciones.json
+
+# Lo que produce el empaquetado
+build/
+dist/
+*.spec.bak
+Releases/
+
+# Lo que produce Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# La carpeta de datos de una instalación de pruebas
+datos/
+/tmp/
+
+# Del sistema
+.DS_Store
+Thumbs.db

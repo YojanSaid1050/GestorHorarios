@@ -1,0 +1,1254 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gestor de Horarios</title>
+<link rel="icon" href="/GestorHorarios.png">
+<link rel="stylesheet" href="/styles.css?v=3.6.2">
+<link rel="stylesheet" href="/ui-system.css?v=3.6.2">
+</head>
+<body class="auth-locked">
+<header class="topbar">
+    <div>
+        <h1>Programación mensual de turnos</h1>
+        <p>Gestión Social · Atención al Ciudadano · Comunicaciones · <span id="nombre-edicion">Gestor de Horarios V1.0</span></p>
+    </div>
+    <div class="topbar-right">
+        <button id="abrir-guia" type="button" class="session-help" title="Ver los primeros pasos">¿Cómo empiezo?</button>
+        <div id="sesion-actual" class="session-pill hidden"><span id="sesion-nombre"></span><button id="cerrar-sesion" type="button" class="session-logout">Salir</button></div>
+        <div class="brand-mark" id="brand-mark"><img id="brand-logo" src="/GestorHorarios.png" alt="Gestor de Horarios"></div>
+    </div>
+</header>
+
+<main>
+<section id="guia-inicio" class="card guide-card hidden" aria-labelledby="guia-titulo">
+    <div class="guide-head">
+        <div>
+            <h2 id="guia-titulo">Primeros pasos</h2>
+            <p class="muted">Este es el orden en que se usa la aplicación. Puedes pulsar cada paso para ir directamente a su pantalla.</p>
+        </div>
+        <button id="guia-cerrar" class="modal-x" type="button" aria-label="Ocultar los primeros pasos">&times;</button>
+    </div>
+    <button id="guia-desplegar" class="guide-toggle" type="button" aria-expanded="false" aria-controls="guia-inicio">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+        <span>Ver los siete pasos</span>
+    </button>
+    <ol class="guide-steps">
+        <li><button type="button" class="guide-step" data-ir="personal"><strong>1 · Revisa el personal</strong><span>Comprueba que estén todas las personas, con su área, su turno y sus parejas. Todo lo demás parte de aquí.</span></button></li>
+        <li><button type="button" class="guide-step" data-ir="solicitudes"><strong>2 · Registra las novedades</strong><span>Vacaciones, incapacidades, permisos y cambios de turno. Apruébalos antes de crear el horario del mes.</span></button></li>
+        <li><button type="button" class="guide-step" data-ir="requerimientos"><strong>3 · Añade las asignaciones fijas</strong><span>Actividades, jornadas administrativas y días de descanso que ya estén decididos.</span></button></li>
+        <li><button type="button" class="guide-step" data-ir="horario"><strong>4 · Crea el horario y compara</strong><span>Elige el periodo arriba y pulsa «Crear horario inicial». La aplicación propone hasta cinco opciones: mira la nota de cada una y marca como oficial la que prefieras.</span></button></li>
+        <li><button type="button" class="guide-step" data-ir="modificar"><strong>5 · Ajusta lo que haga falta</strong><span>Cambia celdas concretas. Si una regla lo impide, la aplicación dice cuál y qué puedes hacer; y si la decisión es operativa, puedes autorizarla justificándola.</span></button></li>
+        <li><button type="button" class="guide-step" data-ir="validacion"><strong>6 · Comprueba y publica</strong><span>Revisa avisos y excepciones, publica el horario y expórtalo a Excel para repartirlo.</span></button></li>
+        <li><button type="button" class="guide-step" data-ir="configuracion"><strong>7 · Ajusta las normas cuando cambien</strong><span>Reparto de turnos por área, festivos, usuarios y copias de seguridad.</span></button></li>
+    </ol>
+    <label class="check guide-dismiss"><input type="checkbox" id="guia-no-mostrar"> No volver a mostrar esto al abrir la aplicación</label>
+</section>
+
+<div class="app-shell">
+<nav class="sidenav" aria-label="Apartados de la aplicación">
+    <div class="nav-group">
+        <p class="nav-title">Datos</p>
+        <button data-tab="personal" class="active"><svg class="nav-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-8 0v2M12 7a4 4 0 1 1 0 8 4 4 0 0 1 0-8z"/></svg><span class="nav-text">Personal</span></button>
+        <button data-tab="solicitudes"><svg class="nav-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M9 15h6"/></svg><span class="nav-text">Solicitudes</span><span class="nav-count" id="nav-count-solicitudes" hidden>0</span></button>
+        <button data-tab="requerimientos"><svg class="nav-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg><span class="nav-text">Asignaciones y ajustes</span><span class="nav-count" id="nav-count-requerimientos" hidden>0</span></button>
+    </div>
+    <div class="nav-group">
+        <p class="nav-title">Horario</p>
+        <button data-tab="horario"><svg class="nav-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9h18M8 3v4M16 3v4M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/></svg><span class="nav-text">Horario</span></button>
+        <button data-tab="modificar"><svg class="nav-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4H4v16h16v-7M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z"/></svg><span class="nav-text">Modificar horario</span></button>
+        <button data-tab="validacion"><svg class="nav-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12l2 2 4-4M12 3l7 4v5c0 4.4-3 8.3-7 9-4-.7-7-4.6-7-9V7z"/></svg><span class="nav-text">Validación</span><span class="nav-count" id="nav-count-validacion" hidden>0</span></button>
+    </div>
+    <div class="nav-group">
+        <p class="nav-title">Sistema</p>
+        <button data-tab="historial"><svg class="nav-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8v4l3 2M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z"/></svg><span class="nav-text">Historial</span></button>
+        <button data-tab="configuracion" aria-expanded="false" aria-controls="nav-configuracion"><svg class="nav-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg><span class="nav-text">Configuración</span><svg class="nav-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+        <div class="nav-sub" id="nav-configuracion">
+            <button type="button" data-ir-config="tarjeta-regla-racha">Jornadas seguidas</button>
+            <button type="button" data-ir-config="tarjeta-reglas-cobertura">Reparto por área</button>
+            <button type="button" data-ir-config="cfg-modo">Claro u oscuro</button>
+            <button type="button" data-ir-config="cfg-apariencia">Color de la aplicación</button>
+            <button type="button" data-ir-config="cfg-colores">Colores del Excel</button>
+            <button type="button" data-ir-config="cfg-festivos">Festivos</button>
+            <button type="button" data-ir-config="cfg-usuarios">Mi contraseña</button>
+            <button type="button" data-ir-config="cfg-reiniciar" class="admin-only">Reiniciar programación</button>
+            <button type="button" data-ir-config="cfg-copias" class="admin-only">Copia de seguridad</button>
+            <button type="button" data-ir-config="cfg-fabrica" class="admin-only">Restablecer aplicación</button>
+            <button type="button" data-ir-config="cfg-archivos">Archivos y datos</button>
+        </div>
+    </div>
+</nav>
+<div class="app-content">
+<section class="toolbar card">
+    <label class="period-control">Periodo<input type="month" id="periodo" min="2026-08"></label>
+    <div class="toolbar-actions">
+        <button id="generar" type="button">Crear horario inicial</button>
+        <button id="regenerar-pendientes" class="secondary" type="button" disabled>Aplicar cambios pendientes</button>
+        <button id="exportar" class="secondary" type="button" disabled>Exportar Excel</button>
+        <button id="abrir-archivo-exportado" class="secondary hidden" type="button">Abrir el Excel exportado</button>
+        <button id="abrir-exportaciones" class="secondary hidden" type="button">Abrir carpeta de exportaciones</button>
+    </div>
+    <p id="ayuda-acciones" class="muted toolbar-hint" role="status" aria-live="polite"></p>
+    <div id="actividad" class="activity-pill hidden" role="status" aria-live="polite">
+        <span class="activity-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9"/></svg></span>
+        <span id="estado">Procesando…</span>
+    </div>
+</section>
+
+
+<section id="personal" class="tab active">
+    <div class="card">
+        <div class="section-head">
+            <div>
+                <h2>Personal</h2>
+                <p>Agrega y organiza el personal que participará en la programación. Para empleados nuevos, la aplicación puede asignar automáticamente una base inicial y dejarla confirmada cuando el horario se marque como oficial.</p>
+            </div>
+        </div>
+
+        <form id="form-empleado" novalidate>
+            <input type="hidden" id="empleado-id">
+
+            <label>Nombre
+                <input id="empleado-nombre" required>
+            </label>
+
+            <label>Área
+                <select id="empleado-area">
+                    <option value="gestion_social">Gestión Social</option>
+                    <option value="atencion_ciudadano">Atención al Ciudadano</option>
+                    <option value="comunicaciones">Comunicaciones</option>
+                </select>
+            </label>
+
+            <label>Tipo de horario
+                <select id="empleado-tipo">
+                    <option value="fijo">Fijo</option>
+                    <option value="rotativo">Rotativo</option>
+                    <option value="administrativo">Administrativo</option>
+                </select>
+            </label>
+
+            <label id="g-nuevo" class="check panel-check">
+                <input type="checkbox" id="empleado-nuevo">
+                Persona nueva en la rotación: dejar que la aplicación elija el turno inicial
+            </label>
+
+            <label id="g-turno">Turno fijo
+                <select id="empleado-turno">
+                    <option>AM</option>
+                    <option>PM</option>
+                </select>
+            </label>
+
+            <label id="g-inicio">Turno inicial
+                <select id="empleado-inicio">
+                    <option>AM</option>
+                    <option>PM</option>
+                </select>
+            </label>
+
+            <label id="g-ancla">Lunes de referencia
+                <input type="date" id="empleado-ancla" min="2026-08-01" data-solo-lunes="1">
+                <small>El lunes desde el que la aplicación cuenta su alternancia AM/PM. Solo hace falta para rotativos que vienen de una programación anterior; el calendario solo deja elegir lunes.</small>
+            </label>
+
+            <label id="g-descanso">Descanso
+                <select id="empleado-descanso">
+                    <option value="">Variable</option>
+                    <option value="0">Lunes</option>
+                    <option value="1">Martes</option>
+                    <option value="2">Miércoles</option>
+                    <option value="3">Jueves</option>
+                    <option value="4">Viernes</option>
+                    <option value="5">Sábado</option>
+                    <option value="6">Domingo</option>
+                </select>
+            </label>
+
+            <label id="g-pareja">Pareja de PC (punto de contacto)
+                <select id="empleado-pareja"><option value="">Sin pareja</option></select>
+                <small>Solo debes elegirla una vez. La aplicación vincula o desvincula automáticamente a ambas personas.</small>
+            </label>
+
+            <label id="g-orden">Posición inicial en la rotación de Comunicaciones
+                <input type="number" id="empleado-orden" min="0" value="0">
+                <small>Define el orden relativo con el que esta persona entra a la rotación del área.</small>
+            </label>
+
+            <label id="g-exento" class="check">
+                <input type="checkbox" id="empleado-exento">
+                Exento del balance de domingos/festivos
+            </label>
+
+            <fieldset id="g-cobertura-dias" class="cobertura-dias">
+                <legend>Días en que esta persona cubre el turno de su área</legend>
+                <label class="check">
+                    <input type="radio" name="empleado-cobertura" id="empleado-cobertura-todos" value="todos" checked>
+                    Todos los días
+                </label>
+                <label class="check">
+                    <input type="radio" name="empleado-cobertura" id="empleado-cobertura-algunos" value="algunos">
+                    Solo estos días
+                </label>
+                <div id="empleado-cobertura-dias" class="dias-semana hidden">
+                    <label class="check"><input type="checkbox" data-dia="0"> Lunes</label>
+                    <label class="check"><input type="checkbox" data-dia="1"> Martes</label>
+                    <label class="check"><input type="checkbox" data-dia="2"> Miércoles</label>
+                    <label class="check"><input type="checkbox" data-dia="3"> Jueves</label>
+                    <label class="check"><input type="checkbox" data-dia="4"> Viernes</label>
+                    <label class="check"><input type="checkbox" data-dia="5"> Sábado</label>
+                    <label class="check"><input type="checkbox" data-dia="6"> Domingo</label>
+                </div>
+                <small>Los días que no marques, esta persona sigue trabajando con su turno
+                    normal, pero no cuenta para el mínimo obligatorio del área: ese día hará
+                    falta otra persona en ese turno.</small>
+            </fieldset>
+
+            <label>Vigente desde
+                <input type="date" id="empleado-vigente-desde" min="2026-08-01" value="2026-08-01" required>
+                <small>Los cambios de área, turno, descanso o pareja se aplicarán desde esta fecha. La programación de la aplicación comienza en agosto de 2026.</small>
+            </label>
+
+            <div id="empleado-form-alerta" class="form-alert hidden" role="alert"></div>
+            <div class="actions">
+                <button type="submit">Guardar</button>
+                <button type="button" id="cancelar-empleado" class="secondary">Cancelar</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="card">
+        <div class="section-head">
+            <div>
+                <h3 id="titulo-tabla-personal">Personal activo</h3>
+                <p class="muted staff-table-help" id="ayuda-tabla-personal">Usa <strong>Retirar</strong> cuando una persona realmente salió de la empresa y <strong>Eliminar</strong> solo para corregir un registro creado por error.</p>
+            </div>
+            <div class="head-actions">
+                <div class="segmented" role="group" aria-label="Qué personal mostrar">
+                    <button type="button" class="seg on" data-vista-personal="activos" aria-pressed="true">Activos</button>
+                    <button type="button" class="seg" data-vista-personal="retirados" aria-pressed="false">Retirados</button>
+                </div>
+            </div>
+        </div>
+        <div class="scroll lista">
+            <table id="tabla-empleados" class="data-table">
+                <thead id="cabecera-tabla-personal"></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<section id="solicitudes" class="tab">
+        <div class="periodo-bar" data-periodo-bar>
+            <button type="button" class="periodo-paso" data-periodo-paso="-1" aria-label="Mes anterior">&#8249;</button>
+            <div class="periodo-bar-texto">
+                <strong data-periodo-nombre>—</strong>
+                <small data-periodo-rango></small>
+            </div>
+            <button type="button" class="periodo-paso" data-periodo-paso="1" aria-label="Mes siguiente">&#8250;</button>
+            <label class="check periodo-todos"><input type="checkbox" data-ver-todo> Ver todos los meses</label>
+        </div>
+    <div class="card">
+        <div class="section-head"><div><h2>Registrar una solicitud</h2><p class="muted">Vacaciones, incapacidades, permisos, capacitaciones y cambios de turno o de descanso. Cada tipo pide solo lo que necesita.</p></div><div class="head-actions"><button type="button" id="actualizar-desde-solicitudes" class="secondary subtle-action" disabled>Elegir qué áreas actualizar</button><button type="button" id="eliminar-solicitudes-vencidas" class="secondary subtle-action">Historial</button><button type="button" id="eliminar-solicitudes-finalizadas" class="secondary danger-soft subtle-action">Limpiar finalizados</button></div></div>
+        <details class="ayuda-plegable"><summary>Qué pasa con una solicitud después de guardarla</summary><p>Mientras está <b>pendiente</b> espera aprobación. Al aprobarla entra en el horario del mes. Si su fecha pasa sin aprobarse queda <b>vencida</b>, y si se cumplió queda <b>finalizada</b>; en ambos casos sale de esta lista y se conserva en Historial. <b>Cancelar</b> la retira dejando constancia de que existió; <b>Eliminar</b> solo es para un registro creado por error.</p></details>
+        <div class="workflow-map" aria-label="Flujo de solicitudes">
+            <div><b>1 · Guardar</b><span>Queda pendiente y todavía no altera ningún turno.</span></div>
+            <div><b>2 · Aprobar</b><span>Se prevalidan fechas, cobertura, descansos y parejas; solo entonces pasa a ser una condición del horario.</span></div>
+            <div><b>3 · Aplicar</b><span>Se recalcula únicamente el área afectada y se crean opciones nuevas. El horario oficial vigente no cambia solo.</span></div>
+            <div><b>4 · Oficializar</b><span>Después de revisar una opción, tú decides si reemplaza al horario oficial.</span></div>
+        </div>
+
+        <form id="form-solicitud" novalidate>
+            <input type="hidden" id="solicitud-id">
+
+            <label>Empleado
+                <select id="solicitud-empleado" required></select>
+            </label>
+
+            <label>Tipo
+                <select id="solicitud-tipo">
+                    <option value="descanso">Mover descanso semanal</option>
+                    <option value="vacaciones">Vacaciones</option>
+                    <option value="incapacidad">Incapacidad</option>
+                    <option value="permiso">Permiso</option>
+                    <option value="capacitacion">Capacitación</option>
+                    <option value="cambio_pareja">Intercambiar AM/PM con pareja de PC</option>
+                    <option value="cambio_persona">Intercambio con otra persona</option>
+                    <option value="turno_dia">Cambio de turno (1-3 días o recurrente)</option>
+                    <option value="turno_semanas">Cambio temporal por semanas</option>
+                </select>
+            </label>
+
+            <label id="g-solicitud-modo-fechas-general">Duración
+                <select id="solicitud-modo-fechas-general">
+                    <option value="uno">Un solo día</option>
+                    <option value="rango">Varios días consecutivos</option>
+                </select>
+                <small>Solo aparece cuando esta solicitud puede durar uno o varios días.</small>
+            </label>
+
+            <label id="g-intercambio">Intercambiar con
+                <select id="solicitud-intercambio"></select>
+                <small>Solo se muestran personas operativas de la misma área.</small>
+            </label>
+
+
+            <label id="g-turno-dia">Turno solicitado
+                <select id="solicitud-turno-dia">
+                    <option value="AM">AM</option>
+                    <option value="PM">PM</option>
+                </select>
+                <small>Solo cambia las fechas seleccionadas. Todas las reglas de cobertura, PC y descansos siguen siendo obligatorias.</small>
+            </label>
+
+            <label id="g-turno-modo">Aplicar el cambio
+                <select id="solicitud-turno-modo">
+                    <option value="rango">Rango de 1 a 3 días</option>
+                    <option value="semanal">Un día específico de todas las semanas del mes</option>
+                </select>
+            </label>
+
+            <label id="g-turno-periodo">Mes del cambio recurrente
+                <input type="month" id="solicitud-turno-periodo" min="2026-08">
+            </label>
+
+            <label id="g-turno-semanal-dia">Día semanal recurrente
+                <select id="solicitud-turno-semanal-dia">
+                    <option value="0">Lunes</option>
+                    <option value="1">Martes</option>
+                    <option value="2">Miércoles</option>
+                    <option value="3">Jueves</option>
+                    <option value="4">Viernes</option>
+                    <option value="5">Sábado</option>
+                    <option value="6">Domingo</option>
+                </select>
+                <small>Ejemplo: Domingo + AM aplica AM a todos los domingos de ese mes y deja intactos los demás días.</small>
+            </label>
+
+            <label id="g-rango-semana-periodo">Mes del cambio temporal
+                <input type="month" id="solicitud-rango-semana-periodo" min="2026-08">
+                <small>Solo se muestran las semanas que pertenecen a este mes.</small>
+            </label>
+
+            <label id="g-rango-semana-inicio">Semana inicial del cambio temporal
+                <select id="solicitud-rango-semana-inicio"></select>
+                <small>El cambio empieza el lunes de la semana seleccionada.</small>
+            </label>
+
+            <label id="g-rango-semana-fin">Semana final del cambio temporal
+                <select id="solicitud-rango-semana-fin"></select>
+                <small>El cambio termina el domingo de la semana seleccionada.</small>
+            </label>
+
+            <label id="g-semana-periodo">Mes de la semana a modificar
+                <input type="month" id="solicitud-semana-periodo" min="2026-08">
+            </label>
+
+            <label id="g-semana">Semana a modificar
+                <select id="solicitud-semana"></select>
+                <small>Las semanas van de lunes a domingo, aunque crucen de un mes al otro.</small>
+            </label>
+
+            <label id="g-dia-descanso">Día de descanso solicitado
+                <select id="solicitud-dia-descanso">
+                    <option value="0">Lunes</option>
+                    <option value="1">Martes</option>
+                    <option value="2">Miércoles</option>
+                    <option value="3">Jueves</option>
+                    <option value="4">Viernes</option>
+                    <option value="5">Sábado</option>
+                    <option value="6">Domingo</option>
+                </select>
+                <small>Qué día quiere librar esa semana.</small>
+            </label>
+
+            <label id="g-fecha-inicio"><span id="texto-fecha-inicio">Inicio</span>
+                <input type="date" id="solicitud-inicio" min="2026-08-01" data-limite-periodo required>
+            </label>
+
+            <label id="g-fecha-fin">Fecha final
+                <input type="date" id="solicitud-fin" min="2026-08-01" data-limite-periodo required>
+                <small id="solicitud-resumen-fechas" class="date-summary"></small>
+                <div id="solicitud-presets-fecha" class="date-presets"><button type="button" data-days="2">2 días</button><button type="button" data-days="3">3 días</button><button type="button" data-days="7">1 semana</button></div>
+            </label>
+
+            <label id="g-hi">Hora inicio
+                <input type="time" id="solicitud-hi">
+            </label>
+
+            <label id="g-hf">Hora fin
+                <input type="time" id="solicitud-hf">
+            </label>
+
+            <label id="g-cobertura"><span id="texto-cobertura-label">Cobertura</span>
+                <select id="solicitud-cobertura">
+                    <option value="sin_cubrir">Sin cubrir</option>
+                    <option value="reemplazar">Reemplazar</option>
+                </select>
+                <small id="texto-cobertura-ayuda"></small>
+            </label>
+
+            <label id="g-reemplazo">Reemplazo
+                <select id="solicitud-reemplazo"></select>
+                <small>El reemplazo no hace doble turno: cambia temporalmente de su AM/PM al turno que quedó descubierto. Solo se acepta si su propio turno sigue cubierto, pertenece a la misma área y no entra en conflicto con su pareja de PC.</small>
+            </label>
+
+            <label>Observación
+                <textarea id="solicitud-observacion"></textarea>
+            </label>
+
+            <label class="check">
+                <input type="checkbox" id="solicitud-aprobada">
+                Aprobada por el jefe
+            </label>
+
+            <div id="solicitud-form-alerta" class="form-alert hidden" role="alert"></div>
+            <div class="actions">
+                <button type="submit">Guardar solicitud</button>
+                <button type="button" id="cancelar-solicitud" class="secondary">Cancelar</button>
+            </div>
+        </form>
+        <div class="area-update-card module-regeneration-card" id="regeneracion-solicitudes">
+            <div class="area-update-heading"><strong>Regenerar por cambios de solicitudes</strong><small>Elige qué área debe incorporar las solicitudes aprobadas. Las demás áreas se conservan sin cambios.</small></div>
+            <div class="area-update-grid">
+                <div class="area-update-item"><div><b>Gestión Social</b><span id="estado-area-gs-solicitudes" class="area-status">Sin consultar</span></div></div>
+                <div class="area-update-item"><div><b>Comunicaciones</b><span id="estado-area-com-solicitudes" class="area-status">Sin consultar</span></div></div>
+                <div class="area-update-item"><div><b>Atención al Ciudadano</b><span id="estado-area-ac-solicitudes" class="area-status">Sin consultar</span></div></div>
+            </div>
+            <div class="area-regeneration-choice">
+                <label>Alcance de la regeneración
+                    <select id="alcance-regeneracion-solicitudes">
+                        <option value="pendientes">Solo áreas con solicitudes pendientes</option>
+                        <option value="gestion_social">Solo Gestión Social</option>
+                        <option value="comunicaciones">Solo Comunicaciones</option>
+                        <option value="atencion_ciudadano">Solo Atención al Ciudadano</option>
+                        <option value="todas">Todas las áreas</option>
+                    </select>
+                    <small>Se crean hasta cinco opciones nuevas del área que elijas. Las otras áreas se quedan exactamente como están.</small>
+                </label>
+                <button id="aplicar-regeneracion-solicitudes" type="button" class="secondary" disabled>Regenerar alcance elegido</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <p id="solicitudes-otros-meses" class="nota-otros-meses hidden"></p>
+        <div class="scroll lista">
+            <table id="tabla-solicitudes" class="data-table">
+                <thead><tr><th>Empleado</th><th>Tipo</th><th>Con / Reemplazo</th><th>Fechas</th><th>Estado</th><th>Acciones</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+
+<section id="requerimientos" class="tab">
+        <div class="periodo-bar" data-periodo-bar>
+            <button type="button" class="periodo-paso" data-periodo-paso="-1" aria-label="Mes anterior">&#8249;</button>
+            <div class="periodo-bar-texto">
+                <strong data-periodo-nombre>—</strong>
+                <small data-periodo-rango></small>
+            </div>
+            <button type="button" class="periodo-paso" data-periodo-paso="1" aria-label="Mes siguiente">&#8250;</button>
+            <label class="check periodo-todos"><input type="checkbox" data-ver-todo> Ver todos los meses</label>
+        </div>
+
+    <div class="card">
+        <div class="section-head">
+            <div>
+                <h2>Poner una asignación o un ajuste</h2>
+                <p>Jornadas administrativas, actividades, días de descanso y excepciones de turno. Se aplican al horario del mes sin tener que editarlo a mano.</p>
+            </div>
+            <div class="head-actions"><button type="button" id="actualizar-desde-asignaciones" class="secondary subtle-action" disabled>Elegir qué áreas actualizar</button><button type="button" id="eliminar-requerimientos-vencidos" class="secondary subtle-action">Historial</button><button type="button" id="eliminar-requerimientos-finalizados" class="secondary danger-soft subtle-action">Limpiar finalizados</button></div>
+        </div>
+        <details class="ayuda-plegable"><summary>Qué puede hacer una asignación y qué no</summary><p>Una asignación directa puede autorizar una coincidencia de pareja o un reparto excepcional. En Comunicaciones el horario normal con tres personas es 1 AM + 2 PM; una asignación explícita puede dejar 2 AM + 1 PM, nunca 3 AM + 0 PM. Las demás reglas operativas siguen vigentes: para superar una regla autorizable hay que ir a <b>Modificar horario</b> y registrar la justificación.</p><p><b>Cancelar</b> conserva el registro en Historial y obliga a recalcular; <b>Eliminar</b> lo borra de todos los registros. Una habitualidad —«los domingos trabaja en AM»— sigue activa todos los meses hasta que se cancela.</p></details>
+        <div class="workflow-map" aria-label="Flujo de asignaciones">
+            <div><b>1 · Prevalidar</b><span>Antes de guardar se revisan persona, fechas, turno, cobertura, pareja y habitualidades.</span></div>
+            <div><b>2 · Activar</b><span>La asignación queda vigente inmediatamente y marca solo su área como pendiente.</span></div>
+            <div><b>3 · Actualizar</b><span>“Actualizar ahora” recalcula las áreas afectadas; “Solo guardar” espera a la siguiente generación.</span></div>
+            <div><b>4 · Revisar</b><span>Las alternativas nunca sustituyen silenciosamente el horario oficial ni las semanas cerradas.</span></div>
+        </div>
+        <form id="form-requerimiento" class="direct-form" novalidate>
+            <input type="hidden" id="requerimiento-id">
+            <label id="g-requerimiento-alcance">Asignar a
+                <select id="requerimiento-alcance">
+                    <option value="persona">Una persona</option>
+                    <option value="area">Toda un área</option>
+                    <option value="todos">Todo el personal</option>
+                </select>
+                <small>Si eliges varias personas, se revisa una por una y te avisa de las que no puedan.</small>
+            </label>
+            <label id="g-requerimiento-area" class="hidden">Área
+                <select id="requerimiento-area">
+                    <option value="gestion_social">Gestión Social</option>
+                    <option value="atencion_ciudadano">Atención al Ciudadano</option>
+                    <option value="comunicaciones">Comunicaciones</option>
+                </select>
+            </label>
+            <label id="g-requerimiento-empleado">Empleado
+                <select id="requerimiento-empleado" required></select>
+            </label>
+            <label>Tipo
+                <select id="requerimiento-tipo">
+                    <option value="actividad">Actividad asignada</option>
+                    <option value="asignacion_administrativa">Asignación administrativa temporal</option>
+                    <option value="descanso_extra">Día de descanso</option>
+                    <option value="excepcion_turno">Excepción de turno AM/PM</option>
+                </select>
+            </label>
+            <label id="g-requerimiento-horario">Horario de la actividad / asignación
+                <select id="requerimiento-horario">
+                    <option value="ADM-GS">ADM-GS · Administrativo Guía Social</option>
+                    <option value="ADM-AC">ADM-AC · Administrativo Atención al Ciudadano</option>
+                </select>
+                <small>Para una actividad masiva administrativa, cada persona usa el horario administrativo compatible con su propia área y participa en la misma actividad del equipo.</small>
+            </label>
+            <label>Aplicar a
+                <select id="requerimiento-modo-fechas">
+                    <option value="uno">Un solo día</option>
+                    <option value="varios">Varios días consecutivos</option>
+                    <option value="recurrente">Día(s) habitual(es) cada semana</option>
+                </select>
+            </label>
+            <label id="g-requerimiento-inicio"><span id="requerimiento-inicio-label">Fecha</span>
+                <input type="date" id="requerimiento-inicio" min="2026-08-01" data-limite-periodo required>
+                <small id="requerimiento-inicio-ayuda">El día en que se aplica.</small>
+            </label>
+            <label id="g-requerimiento-fin">Fecha final
+                <input type="date" id="requerimiento-fin" min="2026-08-01" data-limite-periodo>
+                <small id="requerimiento-resumen-fechas" class="date-summary">Se aplica a todos los días entre las dos fechas, ambas incluidas.</small>
+                <div class="date-presets"><button type="button" data-req-days="2">2 días</button><button type="button" data-req-days="3">3 días</button><button type="button" data-req-days="7">1 semana</button></div>
+            </label>
+            <div id="g-requerimiento-dias-semana" class="weekday-picker hidden">
+                <span>Días de la semana para la habitualidad</span>
+                <div class="weekday-options">
+                    <label><input type="checkbox" class="req-weekday" value="0">Lun</label>
+                    <label><input type="checkbox" class="req-weekday" value="1">Mar</label>
+                    <label><input type="checkbox" class="req-weekday" value="2">Mié</label>
+                    <label><input type="checkbox" class="req-weekday" value="3">Jue</label>
+                    <label><input type="checkbox" class="req-weekday" value="4">Vie</label>
+                    <label><input type="checkbox" class="req-weekday" value="5">Sáb</label>
+                    <label><input type="checkbox" class="req-weekday" value="6">Dom</label>
+                </div>
+                <small id="requerimiento-habitual-ayuda">La habitualidad se mantendrá todas las semanas hasta que elimines esta asignación.</small>
+            </div>
+            <label id="g-requerimiento-cobertura"><span id="requerimiento-cobertura-label">Cobertura PM</span>
+                <select id="requerimiento-cobertura">
+                    <option value="no">No · el administrativo conserva la cobertura si era la única PM</option>
+                    <option value="si">Sí · otra persona debe quedar PM</option>
+                </select>
+                <small id="requerimiento-cobertura-ayuda">Solo aplica a ADM-GS cuando la persona puede dejar sin cobertura PM.</small>
+            </label>
+            <label id="g-requerimiento-reemplazo">Persona que cubrirá PM
+                <select id="requerimiento-reemplazo"></select>
+                <small>La aplicación revisará que el cambio mantenga la cobertura necesaria y no genere conflictos con una pareja de PC.</small>
+            </label>
+            <label>Descripción / actividad
+                <textarea id="requerimiento-descripcion" placeholder="Ej.: apoyo en jornada comunitaria, reunión institucional, actividad de campo..."></textarea>
+            </label>
+            <label>Después de guardar
+                <select id="requerimiento-actualizar-horario">
+                    <option value="no">Solo guardar la asignación</option>
+                    <option value="si">Actualizar ahora el horario del mes</option>
+                </select>
+                <small>«Solo guardar» deja el horario que ves como está. La asignación entrará la próxima vez que generes o actualices ese mes.</small>
+            </label>
+            <div id="requerimiento-form-alerta" class="form-alert hidden" role="alert"></div>
+            <div class="actions direct-actions">
+                <button type="submit">Guardar asignación</button>
+                <button type="button" id="cancelar-requerimiento" class="secondary">Cancelar</button>
+            </div>
+        </form>
+        <div class="area-update-card" id="cambio-turno-card">
+            <div class="area-update-heading">
+                <strong>Cambiar el tipo de turno desde una fecha</strong>
+                <small>Para decir «era de turno fijo hasta el domingo y rota desde el lunes 21». Los días anteriores conservan la programación que ya tenían y la ficha de personal queda actualizada desde esa fecha.</small>
+            </div>
+            <form id="form-cambio-turno" class="direct-form" novalidate>
+                <input type="hidden" id="cambio-turno-fecha-original">
+                <label>Empleado
+                    <select id="cambio-turno-empleado" required></select>
+                </label>
+                <label>Pasa a
+                    <select id="cambio-turno-tipo">
+                        <option value="rotativo">Turno rotativo</option>
+                        <option value="fijo">Turno fijo</option>
+                        <option value="administrativo">Horario administrativo</option>
+                    </select>
+                </label>
+                <label id="g-cambio-turno-inicio">Empieza a rotar en
+                    <select id="cambio-turno-inicio">
+                        <option value="AM">AM</option>
+                        <option value="PM">PM</option>
+                    </select>
+                    <small>Turno que trabajará la primera semana. La semana siguiente pasa al contrario.</small>
+                </label>
+                <label id="g-cambio-turno-fijo" class="hidden">Turno fijo
+                    <select id="cambio-turno-fijo">
+                        <option value="AM">AM</option>
+                        <option value="PM">PM</option>
+                    </select>
+                </label>
+                <label>Desde el
+                    <input type="date" id="cambio-turno-fecha" min="2026-08-01" required>
+                    <small id="cambio-turno-fecha-ayuda">El reparto AM/PM se decide una vez por semana, así que un cambio de turno empieza siempre en lunes. Si eliges otro día, se aplicará el lunes siguiente.</small>
+                </label>
+                <label id="g-cambio-turno-pareja">Pareja de PC (punto de contacto)
+                    <select id="cambio-turno-pareja">
+                        <option value="si">Sí · la pareja cambia con la persona, al turno contrario</option>
+                        <option value="no">No · solo cambia esta persona</option>
+                    </select>
+                    <small>Las parejas van siempre en turnos opuestos. Cambiar solo a una las deja descoordinadas.</small>
+                </label>
+                <label>Motivo
+                    <input type="text" id="cambio-turno-motivo" placeholder="Ej.: reorganización del equipo">
+                </label>
+                <div id="cambio-turno-alerta" class="form-alert hidden" role="alert"></div>
+                <div class="actions direct-actions">
+                    <button type="submit" id="guardar-cambio-turno">Guardar cambio de turno</button>
+                    <button type="button" id="cancelar-edicion-cambio-turno" class="secondary hidden">Cancelar edición</button>
+                </div>
+            </form>
+        </div>
+        <div class="area-update-card module-regeneration-card" id="regeneracion-asignaciones">
+            <div class="area-update-heading"><strong>Regenerar por cambios de asignaciones</strong><small>Elige qué área debe incorporar las asignaciones guardadas. Las demás áreas se conservan sin cambios.</small></div>
+            <div class="area-update-grid">
+                <div class="area-update-item"><div><b>Gestión Social</b><span id="estado-area-gs-asignaciones" class="area-status">Sin consultar</span></div></div>
+                <div class="area-update-item"><div><b>Comunicaciones</b><span id="estado-area-com-asignaciones" class="area-status">Sin consultar</span></div></div>
+                <div class="area-update-item"><div><b>Atención al Ciudadano</b><span id="estado-area-ac-asignaciones" class="area-status">Sin consultar</span></div></div>
+            </div>
+            <div class="area-regeneration-choice">
+                <label>Alcance de la regeneración
+                    <select id="alcance-regeneracion-asignaciones">
+                        <option value="pendientes">Solo áreas con asignaciones pendientes</option>
+                        <option value="gestion_social">Solo Gestión Social</option>
+                        <option value="comunicaciones">Solo Comunicaciones</option>
+                        <option value="atencion_ciudadano">Solo Atención al Ciudadano</option>
+                        <option value="todas">Todas las áreas</option>
+                    </select>
+                    <small>Se crean hasta cinco opciones nuevas del área que elijas. Las otras áreas se quedan exactamente como están.</small>
+                </label>
+                <button id="aplicar-regeneracion-asignaciones" type="button" class="secondary" disabled>Regenerar alcance elegido</button>
+            </div>
+        </div>
+    </div>
+    <div class="card">
+        <p id="requerimientos-otros-meses" class="nota-otros-meses hidden"></p>
+        <div class="scroll lista">
+            <table id="tabla-requerimientos" class="data-table">
+                <thead><tr><th>Empleado</th><th>Tipo</th><th>Horario</th><th>Fechas</th><th>Cobertura</th><th>Descripción</th><th>Acciones</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+    <div class="card" id="cambios-turno-card">
+        <div class="section-head">
+            <div>
+                <h2>Cambios de turno programados</h2>
+                <p>Quién pasa de turno fijo a rotativo —o al revés— y desde qué lunes. Se registran en <b>Personal</b>, en el formulario «Cambiar el tipo de turno desde una fecha», y se muestran aquí para verlos junto al resto de lo que hay puesto.</p>
+            </div>
+        </div>
+        <div class="scroll lista">
+            <table id="tabla-cambios-turno" class="data-table">
+                <thead><tr><th>Empleado</th><th>Desde</th><th>Antes</th><th>Después</th><th>Acciones</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<section id="horario" class="tab">
+    <div class="card wide">
+        <div class="section-head">
+            <div>
+                <h2>Horario mensual</h2>
+                <p>Compara las opciones del mes y elige una. Los colores que ves aquí son los mismos que saldrán en el Excel.</p>
+            </div>
+            <div class="legend">
+                <span class="chip holiday-chip">Festivo</span>
+                <span class="chip admin-friday-chip">Último viernes · ADM</span>
+                <span class="chip shift-D">D</span>
+                <span class="chip shift-AM">AM</span>
+                <span class="chip shift-PM">PM</span>
+            </div>
+        </div>
+        <div id="alternativas-panel" class="alternatives-panel hidden">
+            <div class="alternatives-heading">
+                <div><strong>Alternativas del horario</strong><span id="texto-alternativas" class="muted">Genera el horario para comparar las opciones.</span></div>
+                <div id="resumen-estados-horario" class="schedule-state-summary"></div>
+            </div>
+            <div id="horario-actual-referencia" class="current-schedule-reference hidden"></div>
+            <div id="lista-alternativas" class="alternative-list"></div>
+            <div class="official-actions">
+                <span id="estado-oficial" class="muted"></span>
+                <button id="hacer-oficial" type="button">Marcar como oficial</button>
+                <button id="quitar-oficial" class="secondary hidden" type="button">Quitar carácter oficial</button>
+                <button id="publicar-horario" class="secondary" type="button">Publicar horario</button>
+            </div>
+        </div>
+        <details class="ayuda-plegable">
+            <summary>Cómo se usa esta pantalla y qué significa cada estado</summary>
+            <p><b>1. Genera</b> el horario del mes, o actualiza solo el área que tenga cambios —eso conserva exactamente las otras dos—. <b>2. Compara</b> las opciones y revisa las alertas. <b>3. Marca como oficial</b> la que sirva de base para continuar. <b>4. Publica</b> cuando ya esté revisada y lista para comunicar.</p>
+            <p><b>Oficial</b> es la programación que la aplicación usa como base para continuar al mes siguiente. <b>Publicado</b> confirma que ese horario oficial ya se revisó y es la versión entregada. <b>Viendo</b> solo indica la opción que tienes abierta en pantalla.</p>
+        </details>
+        <div id="estado-periodo" class="publish-summary info-box hidden"></div>
+        <div id="resumen-publicacion" class="publish-summary info-box hidden"></div>
+        <div class="week-locks-card">
+            <div><strong>Semanas del mes</strong><small>Cierra las semanas que ya pasaron. Al volver a generar el mes, esas semanas se quedan tal cual y solo se recalculan las abiertas.</small></div>
+            <div id="lista-semanas-bloqueo" class="week-lock-list"></div>
+        </div>
+        <div class="scroll schedule-scroll"><table id="tabla-horario"></table></div>
+        <div class="hours-info">
+            <strong>Las dos columnas de horas dicen cosas distintas, y las dos son correctas.</strong>
+            <p><b>Horas del período</b> cuenta las semanas completas, del primer lunes al último domingo<span id="ejemplo-rango-periodo"></span>. Es la cifra que el horario equilibra: ahí todo el personal queda parejo, porque todos descansan un día por semana.</p>
+            <p><b>Horas del mes</b> cuenta solo los días de <span id="ejemplo-mes-periodo">ese mes</span>. Aquí unos tendrán más horas y otros menos, según en qué día de la semana caiga su descanso y de qué lado de la frontera del mes queden esos días. <b>Eso es normal y no es un desequilibrio</b>: lo que se compensa en la semana anterior o en la siguiente sigue estando ahí, solo que contado en otro mes.</p>
+            <p class="hours-info-fine">Por eso el horario se programa por semanas completas y no por meses naturales: es la única forma de que el reparto de días libres cuadre de verdad. Una jornada administrativa puede sumar media hora adicional, y un festivo, un compensatorio o una ausencia aprobada reducen el total. Ninguna de esas diferencias genera errores ni descansos automáticos.</p>
+        </div>
+    </div>
+</section>
+
+
+<section id="modificar" class="tab">
+    <div class="card">
+        <div class="section-head">
+            <div>
+                <h2>Reorganizar varias fechas</h2>
+                <p>Usa esta opción cuando permites que la aplicación reajuste turnos o descansos relacionados para encontrar una mejor solución dentro de las semanas seleccionadas.</p>
+            </div>
+        </div>
+        <div class="week-locks-card modify-week-locks">
+            <div><strong>Semanas disponibles para modificar</strong><small>Puedes cerrar o habilitar aquí las mismas semanas que aparecen en Horario. El cambio se sincroniza en ambas pantallas. Las semanas cerradas no aparecen en los selectores y se ocultan del editor hasta que las habilites.</small></div>
+            <div id="lista-semanas-modificar" class="week-lock-list"></div>
+        </div>
+        <div class="partial-controls">
+            <label>Alcance
+                <select id="modificar-alcance">
+                    <option value="todos">Todo el personal</option>
+                    <option value="persona">Una persona</option>
+                    <option value="areas">Una o varias áreas</option>
+                </select>
+            </label>
+            <div id="g-modificar-areas" class="weekday-picker hidden">
+                <span>Áreas que se pueden reorganizar</span>
+                <div class="weekday-options">
+                    <label><input type="checkbox" class="manual-area" value="gestion_social"> Gestión Social</label>
+                    <label><input type="checkbox" class="manual-area" value="comunicaciones"> Comunicaciones</label>
+                    <label><input type="checkbox" class="manual-area" value="atencion_ciudadano"> Atención al Ciudadano</label>
+                </div>
+                <small>Solo se tocarán las áreas seleccionadas; las demás se copiarán literalmente.</small>
+            </div>
+            <label id="g-modificar-persona" class="hidden">Persona
+                <select id="modificar-persona"></select>
+            </label>
+            <label id="g-modificar-reestructurar" class="hidden">Reestructurar otras personas
+                <select id="modificar-reestructurar">
+                    <option value="no">No · modificar solamente a esta persona</option>
+                    <option value="si">Sí · permitir reajustes en su misma área</option>
+                </select>
+                <small>Si eliges No, los demás quedan congelados. Si el cambio rompe una regla, la aplicación explicará exactamente cuál antes de guardar una alternativa.</small>
+            </label>
+            <label>Semana inicial
+                <select id="modificar-semana-inicio"></select>
+            </label>
+            <label>Semana final
+                <select id="modificar-semana-fin"></select>
+            </label>
+            <div class="actions partial-actions">
+                <button type="button" id="reprogramar-parcial">Buscar las 5 mejores opciones para estas semanas</button>
+                <div id="estado-reprogramacion-parcial" class="partial-status hidden" role="status"></div>
+            </div>
+        </div>
+        <details class="ayuda-plegable"><summary>Este modo puede mover otros días</summary><p>Para que el cambio cuadre, la aplicación puede reorganizar otras fechas dentro del alcance que le permitas. Si quieres tocar un solo día y que todo lo demás quede exactamente igual, usa <b>Cambiar solo un día</b>, aquí debajo.</p></details>
+    </div>
+
+    <div class="card">
+        <div class="section-head">
+            <div>
+                <h2>Cambiar el horario manualmente</h2>
+                <p>Elige si quieres modificar una sola fecha sin tocar ninguna otra, o editar varias celdas dentro de las semanas habilitadas. Todos los meses, incluido agosto de 2026, usan las mismas validaciones para cambios nuevos.</p>
+            </div>
+        </div>
+        <div class="manual-mode-controls">
+            <label>Qué quieres modificar
+                <select id="manual-modo">
+                    <option value="dia">Solo este día</option>
+                    <option value="rango">Varias fechas de las semanas seleccionadas</option>
+                </select>
+            </label>
+            <label id="g-manual-persona">Persona
+                <select id="manual-persona"></select>
+            </label>
+            <label id="g-manual-fecha">Fecha
+                <input type="date" id="manual-fecha" min="2026-08-01">
+                <small>En “Solo este día” ninguna otra fecha puede cambiar automáticamente.</small>
+            </label>
+        </div>
+        <div class="manual-toolbar">
+            <div class="manual-source-actions">
+                <button type="button" class="secondary" id="cargar-horario-oficial-modificar">Usar horario oficial</button>
+                <button type="button" class="secondary" id="cargar-editor-manual">Usar horario que estoy viendo</button>
+            </div>
+            <span id="editor-manual-info" class="muted">Primero genera o abre una programación.</span>
+        </div>
+        <details class="ayuda-plegable manual-codes-help"><summary>Qué significa cada opción</summary><p><b>AM</b> y <b>PM</b> son los dos turnos. <b>D</b> es el día de descanso. <b>ADM-GS</b> es la jornada administrativa general, la que puede hacer cualquier área. <b>ADM-AC</b> es la jornada administrativa propia de Atención al Ciudadano y solo la usa esa área. Una <b>pareja de PC</b> (punto de contacto) son dos personas que se cubren entre sí: la aplicación evita ponerlas en el mismo turno para que siempre quede una de las dos disponible.</p></details>
+        <div class="scroll manual-scroll"><table id="tabla-manual"></table></div>
+        <div class="actions manual-actions">
+            <button type="button" id="aplicar-manual" disabled>Validar y preparar el cambio</button>
+            <button type="button" class="secondary" id="descartar-manual" disabled>Descartar cambios</button>
+            <button type="button" class="secondary" id="restablecer-dia-automatico">Volver este día a Automático</button>
+        </div>
+        <label class="manual-force-option">
+            <span><input type="checkbox" id="forzar-programacion-manual"> Autorizar una excepción si el cambio rompe reglas</span>
+            <small>Primero se intenta aplicar normalmente. Si no es posible, puedes autorizar expresamente el cambio. La autorización puede ignorar cualquier regla operativa del horario, pero requiere una justificación y queda registrada. Las protecciones técnicas de datos y permisos no se pueden omitir.</small>
+        </label>
+        <label id="g-motivo-forzado" class="hidden">Justificación de la excepción
+            <textarea id="motivo-forzado" placeholder="Ej.: requerimiento operativo autorizado por coordinación"></textarea>
+            <small>Se guardará en el historial junto con las celdas y reglas excepcionadas.</small>
+        </label>
+        <div id="manual-diagnostico" class="manual-diagnostics hidden"></div>
+    </div>
+</section>
+
+<section id="validacion" class="tab">
+    <div class="card">
+        <div class="section-head">
+            <div>
+                <h2>Validación</h2>
+                <p>Revisa aquí las alertas del horario, qué afectan y qué opciones tienes para corregirlas antes de publicarlo.</p>
+            </div>
+        </div>
+        <details class="ayuda-plegable priority-box"><summary>Cuando dos cosas chocan, ¿qué gana?</summary><p>Primero, lo que ya está aprobado: vacaciones, incapacidades y permisos no se tocan. Después, las asignaciones que pusiste a mano, que pueden autorizar una coincidencia de pareja. Un cambio hecho desde <b>Modificar horario</b> respeta todas las reglas, salvo que lo autorices con una justificación. Y con lo que queda, la aplicación reparte descansos, cubre los turnos y equilibra los domingos del mes.</p></details>
+        <!-- La revisión del mes va primero. El catálogo de reglas ocupaba casi
+             dos mil píxeles por delante, así que quien entraba aquí a ver qué
+             estaba mal leía antes un manual de reglas genéricas y tenía que
+             bajar dos pantallas y media para encontrar sus tres alertas. -->
+        <div id="panel-validacion" class="validation-grid">
+            <div class="info-box">Genera un horario para ver la revisión.</div>
+        </div>
+        <details class="ayuda-plegable"><summary>Ver todas las reglas que aplica la aplicación</summary>
+            <div id="reglas-activas" class="info-box"><div class="muted">Cargando catálogo de reglas…</div></div>
+        </details>
+    </div>
+</section>
+
+<section id="historial" class="tab">
+    <div class="card">
+        <div class="section-head">
+            <div>
+                <h2>Historial de acciones</h2>
+                <p>Consulta los cambios importantes realizados en la aplicación, como publicaciones, reprogramaciones, cierres de semana y copias de seguridad.</p>
+            </div>
+            <div class="actions"><button id="limpiar-historial" type="button" class="secondary">Borrar el historial</button></div>
+        </div>
+        <div class="audit-filters">
+            <label>Tipo<select id="historial-tipo"><option value="">Todos</option><option value="empleado">Personal</option><option value="solicitud">Solicitudes</option><option value="requerimiento">Asignaciones</option><option value="horario">Horarios</option><option value="semana">Semanas</option><option value="configuracion">Configuración</option></select></label>
+            <label>Buscar<input id="historial-buscar" type="search" placeholder="Persona, acción, fecha o detalle"></label>
+        </div>
+        <div class="scroll lista audit-scroll">
+            <table id="tabla-auditoria" class="data-table"><thead><tr><th>Fecha</th><th>Acción</th><th>Elemento</th><th>Detalle</th><th>Acciones</th></tr></thead><tbody></tbody></table>
+        </div>
+    </div>
+</section>
+
+<section id="configuracion" class="tab">
+    <div class="card" id="tarjeta-regla-racha">
+        <div class="section-head">
+            <div>
+                <h2>Máximo de jornadas seguidas</h2>
+                <p>Cuántos días seguidos puede trabajar alguien antes de que la aplicación le ponga un descanso. Vale desde la fecha que elijas en adelante: los meses que ya diste por buenos no se tocan.</p>
+            </div>
+        </div>
+        <div class="coverage-rule" id="regla-racha">
+            <div class="coverage-rule-head">
+                <strong>Regla vigente</strong>
+                <span class="badge badge-auto" id="regla-racha-vigente">Sin consultar</span>
+            </div>
+            <div class="coverage-rule-grid">
+                <label>Máximo de jornadas seguidas
+                    <input type="number" id="regla-racha-max" min="7" max="14" value="10">
+                    <small id="regla-racha-ayuda">De 7 a 14. Por debajo de 7 no existe ninguna programación posible con un solo descanso semanal.</small>
+                </label>
+                <label>Se aplica desde
+                    <input type="date" id="regla-racha-desde" min="2026-08-01">
+                    <small>Los meses anteriores conservan la programación que ya tenían.</small>
+                </label>
+            </div>
+            <div class="coverage-rule-actions">
+                <button type="button" id="regla-racha-guardar">Guardar máximo</button>
+            </div>
+            <details class="coverage-rule-history" id="regla-racha-historial-caja" hidden>
+                <summary>Máximos anteriores</summary>
+                <ul id="regla-racha-historial"></ul>
+            </details>
+        </div>
+        <details class="ayuda-plegable">
+            <summary>¿Por qué viene puesto en 10?</summary>
+            <p>Porque es el número con el que salen bien los domingos. Cada persona tiene un solo descanso a la semana, y ese descanso solo puede moverse unos pocos días de una semana a la siguiente: cuanto más bajo es el tope, menos se mueve. Con el tope en 7, a quien acaba un mes descansando en martes le cuesta más de un mes llegar a descansar un domingo, y su reparto de domingos ya no cuadra.</p>
+            <p>Se probaron 28 meses seguidos con cada valor: con tope 7 el reparto de domingos falla en 33 casos, con 8 en 14, con 9 en 3 y <b>con 10 en ninguno</b>. Subirlo por encima de 10 no mejora nada y solo hace que la gente encadene más días seguidos.</p>
+        </details>
+    </div>
+    <div class="card" id="tarjeta-reglas-cobertura">
+        <div class="section-head">
+            <div>
+                <h2>Reparto de turnos por área</h2>
+                <p>Cuánta gente trabaja de mañana y de tarde en cada área. Vale desde la fecha que elijas en adelante: los meses que ya diste por buenos no se tocan.</p>
+            </div>
+        </div>
+        <div id="reglas-cobertura-lista" class="coverage-rules"></div>
+        <details class="ayuda-plegable">
+            <summary>Qué diferencia hay entre «reparto normal» y «mínimo obligatorio»</summary>
+            <p>El <b>reparto normal</b> es a lo que apunta la rotación cuando no pasa nada raro: por ejemplo, 2 personas en AM y 1 en PM en Comunicaciones.</p>
+            <p>El <b>mínimo obligatorio</b> es el suelo que nunca se baja. Es lo que impide que alguien descanse un día si con eso el área se quedaría sin nadie. Si dejas el reparto normal en blanco, el área lo calcula sola según la gente que tenga, como hace Gestión Social con sus turnos fijos.</p>
+        </details>
+    </div>
+
+    <div class="card" id="cfg-modo">
+        <div class="section-head">
+            <div>
+                <h2>Claro u oscuro</h2>
+                <p>Cómo se ve la aplicación. «El del sistema» sigue a Windows, así que si tu equipo cambia a oscuro por la tarde, la aplicación cambia con él. La tabla del horario conserva siempre sus colores, porque son los mismos que salen impresos y en el Excel.</p>
+            </div>
+        </div>
+        <div class="modo-app" role="group" aria-label="Modo de la aplicación">
+            <button type="button" data-modo-opcion="claro" aria-pressed="false">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6"/></svg>
+                Claro
+            </button>
+            <button type="button" data-modo-opcion="oscuro" aria-pressed="false">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.3A8.5 8.5 0 1 1 9.7 3.5a6.8 6.8 0 0 0 10.8 10.8Z"/></svg>
+                Oscuro
+            </button>
+            <button type="button" data-modo-opcion="sistema" aria-pressed="false">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.8" y="4.2" width="18.4" height="12.6" rx="1.8"/><path d="M8.5 20.3h7"/></svg>
+                El del sistema
+            </button>
+        </div>
+        <small class="muted modo-app-nota" id="modo-app-nota">El cambio se ve al instante y queda guardado.</small>
+    </div>
+
+    <div class="card app-theme-card" id="cfg-apariencia">
+        <div class="section-head">
+            <div>
+                <h2>Color de la aplicación</h2>
+                <p>Elige un estilo para botones, pestañas, encabezados y avisos. El tema CABLEMOVIL usa los colores institucionales del manual y reemplaza el icono superior por el logotipo oficial; los colores del horario y del Excel se configuran aparte.</p>
+            </div>
+        </div>
+        <div class="theme-settings-row">
+            <label>Color principal
+                <select id="tema-app"></select>
+            </label>
+            <div id="tema-preview" class="theme-preview" aria-label="Vista previa del color seleccionado"></div>
+            <div class="theme-actions">
+                <button id="guardar-tema-app" type="button">Aplicar color</button>
+                <button id="restablecer-tema-app" type="button" class="secondary">Volver a morado</button>
+            </div>
+        </div>
+        <small class="theme-note">Al seleccionar un color verás una vista previa inmediata. Pulsa “Aplicar color” para conservarlo. Se ofrecen tonos claros y medios para mantener el texto legible.</small>
+    </div>
+
+    <div class="card" id="cfg-colores">
+        <div class="section-head">
+            <div>
+                <h2>Colores del horario y Excel</h2>
+                <p>Elige los colores que quieres usar para cada turno y estado. Se aplicarán tanto en la vista del horario como en el Excel.</p>
+            </div>
+        </div>
+        <details class="paletas" id="bloque-paletas" open>
+            <summary class="paletas-cab">
+                <strong>Paletas listas</strong>
+                <span class="muted">Aplica una de un clic y luego ajusta los colores que quieras: cada uno sigue siendo editable abajo.</span>
+            </summary>
+            <!-- Empieza con un aviso dentro: las paletas llegan del servidor al
+                 arrancar y, hasta que llegan, esta caja se veía abierta y vacía. -->
+            <div id="lista-paletas" class="paletas-grupos"><p class="muted">Cargando las paletas…</p></div>
+        </details>
+        <div id="excel-color-grid" class="color-grid">
+            <label>Encabezado principal<input type="color" id="color-header" data-color-key="header"><span class="color-code" data-color-code="header"></span></label>
+            <label>Encabezado sábado<input type="color" id="color-saturday" data-color-key="saturday_header"><span class="color-code" data-color-code="saturday_header"></span></label>
+            <label>Encabezado domingo<input type="color" id="color-sunday" data-color-key="sunday_header"><span class="color-code" data-color-code="sunday_header"></span></label>
+            <label>Encabezado festivo<input type="color" id="color-holiday" data-color-key="holiday_header"><span class="color-code" data-color-code="holiday_header"></span></label>
+            <label>Encabezado último viernes administrativo<input type="color" id="color-admin-friday" data-color-key="admin_friday_header"><span class="color-code" data-color-code="admin_friday_header"></span></label>
+            <label>Celdas del último viernes ADM<input type="color" id="color-admin-friday-cell" data-color-key="admin_friday_cell"><span class="color-code" data-color-code="admin_friday_cell"></span></label>
+            <label>Encabezado de días de otro mes<input type="color" id="color-otro-mes" data-color-key="otro_mes_header"><span class="color-code" data-color-code="otro_mes_header"></span></label>
+            <label>Celdas de días de otro mes<input type="color" id="color-otro-mes-cell" data-color-key="otro_mes_cell"><span class="color-code" data-color-code="otro_mes_cell"></span></label>
+            <label>Turno AM<input type="color" id="color-am" data-color-key="AM"><span class="color-code" data-color-code="AM"></span></label>
+            <label>Turno PM<input type="color" id="color-pm" data-color-key="PM"><span class="color-code" data-color-code="PM"></span></label>
+            <label>Descanso D<input type="color" id="color-d" data-color-key="D"><span class="color-code" data-color-code="D"></span></label>
+            <label>ADM-GS<input type="color" id="color-adm-gs" data-color-key="ADM-GS"><span class="color-code" data-color-code="ADM-GS"></span></label>
+            <label>ADM-AC<input type="color" id="color-adm-ac" data-color-key="ADM-AC"><span class="color-code" data-color-code="ADM-AC"></span></label>
+            <label>Vacaciones<input type="color" id="color-vac" data-color-key="VAC"><span class="color-code" data-color-code="VAC"></span></label>
+            <label>Incapacidad<input type="color" id="color-inc" data-color-key="INC"><span class="color-code" data-color-code="INC"></span></label>
+            <label>Permiso<input type="color" id="color-per" data-color-key="PER"><span class="color-code" data-color-code="PER"></span></label>
+            <label>Capacitación<input type="color" id="color-cap" data-color-key="CAP"><span class="color-code" data-color-code="CAP"></span></label>
+        </div>
+        <div class="actions config-actions">
+            <button id="guardar-colores" type="button">Guardar colores</button>
+            <button id="restablecer-colores" type="button" class="secondary">Restaurar todos los colores</button>
+        </div>
+    </div>
+
+    <div class="card holiday-settings-card" id="cfg-festivos">
+        <div class="section-head">
+            <div>
+                <h2>Fechas de festivos</h2>
+                <p>Revisa los festivos del año y ajusta su fecha cuando sea necesario. La nueva fecha se tendrá en cuenta al volver a generar el horario.</p>
+            </div>
+        </div>
+        <div class="holiday-toolbar">
+            <label>Año
+                <input type="number" id="festivos-anio" min="2026" max="2100" value="2026">
+            </label>
+            <button id="cargar-festivos" type="button" class="secondary">Cargar festivos</button>
+        </div>
+        <div class="scroll lista holiday-scroll">
+            <table id="tabla-festivos" class="data-table">
+                <thead><tr><th>Festivo</th><th>Fecha calculada</th><th>Fecha efectiva</th><th>Estado</th><th>Acciones</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <details class="ayuda-plegable"><summary>He movido un festivo y el horario sigue igual</summary><p>Es lo esperado: un horario que ya marcaste como oficial no cambia solo, para que nadie se encuentre con una programación distinta de la que repartió. Para que la fecha nueva entre, vuelve a generar ese mes desde <b>Horario</b>.</p></details>
+    </div>
+
+    <div class="card security-card" id="cfg-usuarios">
+        <div class="section-head">
+            <div><h2>Mi contraseña y usuarios</h2><p>Cambia tu contraseña cuando quieras. Crear cuentas para otras personas solo puede hacerlo el administrador.</p></div>
+        </div>
+        <div class="security-grid">
+            <div class="security-panel">
+                <strong>Tu contraseña</strong>
+                <label>Contraseña actual<span class="password-field"><input id="clave-actual" type="password" autocomplete="current-password"><button class="password-toggle" type="button" data-toggle-password aria-pressed="false" aria-label="Mostrar contraseña" title="Mostrar contraseña"><svg class="eye-open" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z"/><circle cx="12" cy="12" r="2.8"/></svg><svg class="eye-slash" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 6.7A9.9 9.9 0 0 1 12 6.6c6.4 0 10 5.4 10 5.4a18 18 0 0 1-3.3 3.8"/><path d="M6.5 8.3A17.6 17.6 0 0 0 2 12s3.6 5.4 10 5.4c1.4 0 2.6-.2 3.7-.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg></button></span></label>
+                <label>Nueva contraseña<span class="password-field"><input id="clave-nueva" type="password" autocomplete="new-password" minlength="8"><button class="password-toggle" type="button" data-toggle-password aria-pressed="false" aria-label="Mostrar contraseña" title="Mostrar contraseña"><svg class="eye-open" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z"/><circle cx="12" cy="12" r="2.8"/></svg><svg class="eye-slash" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 6.7A9.9 9.9 0 0 1 12 6.6c6.4 0 10 5.4 10 5.4a18 18 0 0 1-3.3 3.8"/><path d="M6.5 8.3A17.6 17.6 0 0 0 2 12s3.6 5.4 10 5.4c1.4 0 2.6-.2 3.7-.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg></button></span></label>
+                <button id="cambiar-clave-propia" type="button">Cambiar mi contraseña</button>
+            </div>
+            <div class="security-panel admin-only" id="panel-usuarios-admin">
+                <strong>Usuarios de horarios</strong>
+                <p class="muted">Aquí decides quién más puede entrar a trabajar con los horarios. Cada persona entra con su propio usuario y su contraseña, así que en el historial queda quién hizo cada cosa.</p>
+                <div class="user-create-grid">
+                    <label>Nombre<input id="nuevo-usuario-nombre" type="text" autocomplete="off" placeholder="Nombre completo"></label>
+                    <label>Usuario<input id="nuevo-usuario-login" type="text" autocomplete="off" placeholder="ej. katerine"></label>
+                    <label>Contraseña inicial<span class="password-field"><input id="nuevo-usuario-clave" type="password" autocomplete="new-password" minlength="8"><button class="password-toggle" type="button" data-toggle-password aria-pressed="false" aria-label="Mostrar contraseña" title="Mostrar contraseña"><svg class="eye-open" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z"/><circle cx="12" cy="12" r="2.8"/></svg><svg class="eye-slash" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 6.7A9.9 9.9 0 0 1 12 6.6c6.4 0 10 5.4 10 5.4a18 18 0 0 1-3.3 3.8"/><path d="M6.5 8.3A17.6 17.6 0 0 0 2 12s3.6 5.4 10 5.4c1.4 0 2.6-.2 3.7-.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg></button></span></label>
+                </div>
+                <button id="crear-usuario-horarios" type="button">Añadir usuario</button>
+                <div id="lista-usuarios-admin" class="users-admin-list"></div>
+            </div>
+        </div>
+        
+    </div>
+
+    <div class="card reset-program-card admin-only" id="cfg-reiniciar">
+        <div class="section-head">
+            <div>
+                <h2>Reiniciar programación</h2>
+                <p>Borra las programaciones guardadas desde el mes que elijas para volver a generarlas sin perder personal, solicitudes ni configuración.</p>
+            </div>
+        </div>
+        <div class="reset-program-row">
+            <label class="reset-period-control">Mes
+                <select id="reiniciar-mes" aria-describedby="reiniciar-programacion-ayuda"></select>
+            </label>
+            <label class="reset-period-control">Año
+                <select id="reiniciar-anio"></select>
+            </label>
+            <input type="hidden" id="reiniciar-periodo" value="2026-10">
+            <button id="reiniciar-programacion" type="button" class="danger-button">Reiniciar desde este mes</button>
+        </div>
+        <small id="reiniciar-programacion-ayuda" class="reset-program-note">Agosto y septiembre de 2026 son las dos programaciones base de la aplicación: llegan ya vigentes y no se reinician. Por eso el reinicio solo puede comenzar en octubre de 2026 o en un periodo posterior.</small>
+        <details class="ayuda-plegable reset-info"><summary>Un ejemplo, para no equivocarse</summary><p>Si eliges octubre de 2026: se conservan agosto y septiembre, y desaparecen octubre y todos los meses que hubieras guardado después. Luego puedes volver a generar octubre partiendo del horario de septiembre.</p><p>Si lo que quieres es rehacer <b>una semana</b>, esto no es lo tuyo: eso se hace desde <b>Horario</b> o desde <b>Modificar horario</b>, sin borrar nada.</p></details>
+    </div>
+
+    <div class="card backup-card admin-only" id="cfg-copias">
+        <div class="section-head">
+            <div><h2>Copia de seguridad</h2><p>Crea una copia de seguridad de toda la información de la aplicación o restaura una copia anterior.</p></div>
+        </div>
+        <div class="backup-actions">
+            <button id="crear-backup" type="button">Crear copia de seguridad</button>
+            <label class="file-button secondary">Restaurar copia<input id="archivo-backup" type="file" accept=".db,.sqlite,.sqlite3"></label>
+        </div>
+        <div id="estado-backup" class="muted">Las copias creadas se guardan en la carpeta de exportaciones de respaldo.</div>
+    </div>
+
+    <div class="card factory-reset-card admin-only" id="cfg-fabrica">
+        <div class="section-head">
+            <div>
+                <h2>Restablecer aplicación</h2>
+                <p>Úsalo al terminar las pruebas para volver al estado inicial antes de trabajar con la programación real.</p>
+            </div>
+        </div>
+        <div class="factory-reset-content">
+            <div class="factory-reset-copy">
+                <strong>Se conservará únicamente la base inicial de producción:</strong> personal predeterminado y horarios oficiales/publicados de agosto y septiembre de 2026. Se eliminarán solicitudes, asignaciones, horarios posteriores, semanas cerradas, festivos ajustados, historial y personal agregado durante las pruebas. Los colores volverán a sus valores predeterminados.
+            </div>
+            <button id="reiniciar-fabrica" type="button" class="danger-button">Restablecer app de fábrica</button>
+        </div>
+        <small class="factory-reset-note">Antes de borrar los datos, la aplicación crea automáticamente una copia de seguridad en la carpeta de respaldos. Los Excel ya exportados no se eliminan.</small>
+    </div>
+
+    <div class="card" id="cfg-actualizaciones">
+        <h2>Versión y actualizaciones</h2>
+        <p class="muted">Comprueba si hay una versión más nueva publicada, descárgala y ponla. Tus datos —personal, solicitudes, horarios e historial— no se tocan al actualizar: viven en una carpeta aparte.</p>
+        <div class="paths-grid">
+            <div><span class="path-label">Versión instalada</span><code id="version-instalada">…</code></div>
+            <div><span class="path-label">Última comprobación</span><span id="version-estado">Sin comprobar todavía.</span></div>
+        </div>
+        <div id="version-novedad" class="form-alert hidden" role="status"></div>
+        <div class="actions">
+            <button type="button" id="comprobar-actualizacion">Comprobar si hay una versión nueva</button>
+            <button type="button" id="descargar-actualizacion" class="hidden">Descargar</button>
+            <button type="button" id="instalar-actualizacion" class="hidden">Instalar y reiniciar</button>
+        </div>
+        <details class="ayuda-plegable"><summary>Qué pasa al instalar una versión nueva</summary><p>La aplicación se cierra un momento para dejar que el instalador reemplace el programa, y después puedes volver a abrirla. El instalador reconoce la versión que ya tienes y la actualiza en su sitio: no hay que desinstalar nada antes y no aparece una segunda copia. Antes de reemplazar el programa se guarda una copia de la base de datos, por si acaso.</p></details>
+    </div>
+
+    <div class="card" id="cfg-archivos">
+        <h2>Archivos y datos de la aplicación</h2>
+        <p class="muted">Consulta dónde se guardan el programa, la base de datos y las exportaciones. Las actualizaciones mantienen tus datos separados de los archivos de instalación.</p>
+        <div id="rutas-aplicacion" class="paths-grid">Cargando rutas…</div>
+        <details class="ayuda-plegable"><summary>Qué son ADM-GS, ADM-AC y una pareja de PC</summary><p><b>ADM-GS</b> es la jornada administrativa general: la puede hacer cualquier área. <b>ADM-AC</b> es la jornada administrativa propia y permanente de Atención al Ciudadano. Una <b>pareja de PC</b> (punto de contacto) son dos personas que se cubren entre sí: la aplicación evita ponerlas en el mismo turno para que siempre quede una de las dos disponible.</p></details>
+    </div>
+</section>
+</div>
+</div>
+</main>
+
+<footer>Creado por <strong>xYojanSaidx</strong></footer>
+<div id="login-overlay" class="login-overlay">
+    <form id="form-login" class="login-card" autocomplete="on" novalidate>
+        <span class="login-marca"><img id="login-logo" src="/GestorHorarios.png" alt="" class="login-icon"></span>
+        <h2 id="login-titulo">Gestor de Horarios</h2>
+        <p class="login-sub"><span id="login-edicion">Programación de turnos</span></p>
+        <label>Usuario
+            <select id="login-usuario">
+                <option value="">Cargando cuentas…</option>
+            </select>
+        </label>
+        <label>Contraseña<span class="password-field"><input id="login-password" type="password" autocomplete="current-password" required><button id="toggle-login-password" class="password-toggle" type="button" aria-pressed="false" aria-label="Mostrar contraseña" title="Mostrar contraseña"><svg class="eye-open" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z"/><circle cx="12" cy="12" r="2.8"/></svg><svg class="eye-slash" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 6.7A9.9 9.9 0 0 1 12 6.6c6.4 0 10 5.4 10 5.4a18 18 0 0 1-3.3 3.8"/><path d="M6.5 8.3A17.6 17.6 0 0 0 2 12s3.6 5.4 10 5.4c1.4 0 2.6-.2 3.7-.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg></button></span></label>
+        <label class="check login-recordar"><input type="checkbox" id="login-recordar">
+            Recordar mi contraseña en este equipo</label>
+        <small class="login-aviso">Solo si este ordenador es de uso personal: la contraseña queda guardada aquí aunque cierres y vuelvas a abrir la aplicación. Se borra al desmarcar la casilla.</small>
+        <div id="login-alerta" class="form-alert hidden" role="alert"></div>
+        <button type="submit">Entrar</button>
+        <p class="login-firma">Creado por <strong>xYojanSaidx</strong></p>
+    </form>
+</div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<div id="modal-exportar" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="titulo-exportar">
+    <div class="modal-card">
+        <div class="modal-head">
+            <div>
+                <h3 id="titulo-exportar">Exportar programación a Excel</h3>
+                <p id="descripcion-exportar">Escribe el nombre del archivo. La aplicación indicará si puedes elegir la ubicación o si usará la carpeta segura de exportaciones.</p>
+            </div>
+            <button id="cerrar-modal-exportar" class="modal-x" type="button" aria-label="Cerrar">×</button>
+        </div>
+        <label>Nombre del archivo
+            <input id="nombre-exportacion" type="text" autocomplete="off">
+        </label>
+        <label>Qué libro
+            <select id="exportar-libro">
+                <option value="trabajo">Para trabajar · semanas completas y su reflejo del mes</option>
+                <option value="completo">Completo · con comentarios y hojas de consulta</option>
+                <option value="semana">Una semana suelta</option>
+            </select>
+            <small id="ayuda-exportar-libro">El libro para trabajar lleva dos hojas: se cambia un turno en «Semanas completas» y la hoja «Solo el mes» lo recoge sola.</small>
+        </label>
+        <label id="g-exportar-semana" class="hidden">Qué semana
+            <select id="exportar-semana"></select>
+            <small>Sale de lunes a domingo, con las horas calculadas.</small>
+        </label>
+        <div id="ruta-exportacion" class="export-path">Consultando carpeta de exportación…</div>
+        <div class="modal-actions">
+            <button id="cancelar-exportacion" class="secondary" type="button">Cancelar</button>
+            <button id="confirmar-exportacion" type="button">Continuar con la exportación</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-soluciones" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="soluciones-titulo">
+    <div class="modal-card solutions-card">
+        <div class="modal-head">
+            <div><h3 id="soluciones-titulo">Conflicto detectado</h3><p id="soluciones-resumen">Elige cómo quieres resolverlo.</p></div>
+            <button id="cerrar-soluciones" class="modal-x" type="button" aria-label="Cerrar">×</button>
+        </div>
+        <div id="soluciones-lista" class="solutions-list"></div>
+        <div class="modal-actions">
+            <button id="solucion-cancelar" class="secondary" type="button">Cancelar</button>
+            <button id="solucion-manual" class="secondary" type="button">Resolver manualmente</button>
+            <button id="solucion-omitir" type="button">Guardar fechas sin conflicto</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-edicion-formulario" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="edicion-formulario-titulo">
+    <div class="modal-card form-edit-modal">
+        <div class="modal-head">
+            <div><h3 id="edicion-formulario-titulo">Editar</h3><p id="edicion-formulario-ayuda">Realiza los cambios y guarda para volver a la lista en la misma posición.</p></div>
+            <button id="cerrar-edicion-formulario" class="modal-x" type="button" aria-label="Cerrar">×</button>
+        </div>
+        <div id="edicion-formulario-contenido"></div>
+    </div>
+</div>
+
+<div id="modal-confirmar" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="confirmar-titulo">
+    <div class="modal-card confirm-card">
+        <button id="confirmar-cerrar" class="modal-x" type="button" aria-label="Cerrar sin confirmar">&times;</button>
+        <div id="confirmar-icono" class="confirm-symbol" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 9v4m0 4h.01M10.3 3.7 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.7a2 2 0 0 0-3.4 0Z"/></svg></div>
+        <div>
+            <h3 id="confirmar-titulo">Confirmar acción</h3>
+            <p id="confirmar-mensaje" class="confirm-message"></p>
+            <p id="confirmar-detalle" class="confirm-detail hidden"></p>
+        </div>
+        <div class="modal-actions">
+            <button id="confirmar-cancelar" class="secondary" type="button">Cancelar</button>
+            <button id="confirmar-aceptar" class="danger-button" type="button">Confirmar</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-retirar-empleado" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="retirar-empleado-titulo">
+    <div class="modal-card retire-employee-card">
+        <div class="modal-head">
+            <div>
+                <h3 id="retirar-empleado-titulo">Retirar colaborador</h3>
+                <p id="retirar-empleado-mensaje" class="confirm-message"></p>
+            </div>
+            <button id="cerrar-retirar-empleado" class="modal-x" type="button" aria-label="Cerrar">×</button>
+        </div>
+        <label>Último día vigente
+            <input type="date" id="retirar-empleado-fecha" min="2026-08-01" required>
+            <small>Desde el día siguiente la persona dejará de participar en la generación y regeneración del horario.</small>
+        </label>
+        <label>Motivo
+            <select id="retirar-empleado-motivo">
+                <option value="renuncia">Renuncia</option>
+                <option value="fin_contrato">Terminación de contrato</option>
+                <option value="otro">Otro retiro</option>
+            </select>
+        </label>
+        <div class="modal-actions">
+            <button id="cancelar-retirar-empleado" class="secondary" type="button">Cancelar</button>
+            <button id="confirmar-retirar-empleado" class="danger-button" type="button">Retirar colaborador</button>
+        </div>
+    </div>
+</div>
+<!-- La pantalla va partida por temas: cada archivo es una parte de la
+     aplicación y se cargan en orden, compartiendo el mismo ámbito.
+     Ver frontend/js/LEEME.md. -->
+<script src="/js/01-acceso.js?v=3.6.2"></script>
+<script src="/js/02-periodo.js?v=3.6.2"></script>
+<script src="/js/03-estructura.js?v=3.6.2"></script>
+<script src="/js/04-personal.js?v=3.6.2"></script>
+<script src="/js/05-solicitudes.js?v=3.6.2"></script>
+<script src="/js/06-asignaciones.js?v=3.6.2"></script>
+<script src="/js/07-formularios-fecha.js?v=3.6.2"></script>
+<script src="/js/08-validacion.js?v=3.6.2"></script>
+<script src="/js/09-horario.js?v=3.6.2"></script>
+<script src="/js/10-exportacion.js?v=3.6.2"></script>
+<script src="/js/11-apariencia.js?v=3.6.2"></script>
+<script src="/js/12-reparto-areas.js?v=3.6.2"></script>
+<script src="/js/13-modificar.js?v=3.6.2"></script>
+<script src="/js/14-arranque.js?v=3.6.2"></script>
+</body>
+</html>
