@@ -57,6 +57,19 @@ jobs:
         # que vienen después de la que ya falló.
         run: python -m pytest -v -x --durations=15
 
+      - name: Enseñar dónde se quedó, si se quedó
+        # Solo corre cuando el paso de arriba ha fallado. El tope por prueba deja
+        # la pila escrita en la salida, pero si lo que se colgó fue el proceso
+        # entero —y no una prueba— esto es lo único que queda para mirar.
+        if: failure()
+        shell: pwsh
+        run: |
+          Write-Host "La batería no terminó. El último nombre que aparece arriba"
+          Write-Host "es la prueba que no llegó a acabar."
+          Write-Host "Para repetirlo en un Windows cualquiera, en la carpeta del proyecto:"
+          Write-Host "    python -m pytest -v -x"
+
+
       - name: Instalar vpk
         run: dotnet tool install -g vpk
 

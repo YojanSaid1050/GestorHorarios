@@ -31,5 +31,12 @@ velopack>=1.2,<2.0 ; sys_platform == 'win32'
 
 # --- solo para desarrollar y probar ---
 pytest>=8.3,<10.0
+
+# Para que una prueba que se queda esperando **falle y cuente dónde**, en vez de
+# quedarse parada. No es comodidad: una batería colgada en una máquina de GitHub
+# corre hasta las seis horas, gasta minutos y no deja nada que leer. Con esto
+# vuelca la pila del punto exacto en el que se quedó, que es la única forma de
+# arreglar algo que solo pasa en un sistema que no tienes delante.
+pytest-timeout>=2.3,<3.0
 httpx>=0.27,<1.0
 ruff>=0.8,<1.0

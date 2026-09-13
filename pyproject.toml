@@ -121,3 +121,13 @@ testpaths = ["pruebas"]
 python_files = ["test_*.py"]
 addopts = "-q"
 markers = ["lenta: genera meses completos y tarda"]
+
+# Ninguna prueba de esta batería tarda más de unos segundos; las que generan
+# meses enteros van marcadas como `lenta` y se piden aparte. Tres minutos es un
+# tope que ninguna puede alcanzar trabajando, así que alcanzarlo significa que se
+# quedó esperando algo.
+#
+# `thread` y no `signal` porque las alarmas de señal no existen en Windows, que
+# es justo donde hizo falta esto.
+timeout = 180
+timeout_method = "thread"
