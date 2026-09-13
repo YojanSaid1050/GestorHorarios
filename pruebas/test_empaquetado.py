@@ -139,11 +139,69 @@ def test_una_desinstalación_silenciosa_nunca_borra(monkeypatch, carpeta_de_dato
     assert rutas.BASE_DE_DATOS.is_file()
 
 
-def test_si_no_se_puede_preguntar_se_conserva():
-    """Fuera de Windows no hay diálogo, y eso significa «no», nunca «sí»."""
+def test_fuera_de_windows_no_hay_diálogo_y_eso_significa_no():
+    """Y fuera de Windows se puede llamar de verdad, porque no abre nada."""
+    import os
+
     from gestor import desinstalacion
 
+    if os.name == 'nt':
+        pytest.skip('en Windows esto abre un cuadro de diálogo de verdad')
     assert desinstalacion._preguntar('¿?', 'Título') is False
+
+
+def test_todo_lo_que_no_sea_un_sí_expreso_es_un_no():
+    """La decisión, comprobada sin abrir ninguna ventana.
+
+    Esta prueba llamaba antes a `_preguntar` a secas. Fuera de Windows no pasa
+    nada —contesta «no» sin tocar el sistema—, pero **en Windows abre un cuadro
+    de diálogo y se queda esperando a que alguien pulse un botón**. En la máquina
+    de GitHub no hay nadie: la batería entera se paró once minutos ahí, tres
+    publicaciones seguidas, sin dejar dicho dónde.
+
+    La parte que importa de verdad es qué se hace con la respuesta, y eso no
+    necesita ninguna ventana: se comprueba aquí, en todos los sistemas.
+    """
+    from gestor import desinstalacion
+
+    assert desinstalacion._es_un_si(desinstalacion.RESPUESTA_SI) is True
+    for respuesta, que_es in (
+            (desinstalacion.RESPUESTA_SE_ACABO_EL_TIEMPO, 'nadie contestó'),
+            (7, 'pulsó que no'),
+            (2, 'cerró la ventana'),
+            (0, 'ni siquiera se pudo abrir')):
+        assert desinstalacion._es_un_si(respuesta) is False, que_es
+
+
+def test_ningún_cuadro_de_diálogo_espera_para_siempre():
+    """La regla, en todo el programa y no solo donde ya mordió.
+
+    `MessageBoxW` no vuelve hasta que alguien pulsa un botón. Donde no hay nadie
+    delante —una máquina de compilación, una tarea programada, un despliegue
+    gobernado por el sistema— eso no es un cartel: es un proceso que no termina
+    nunca, sin error y sin nada que mirar.
+
+    Costó tres publicaciones enteras. La batería se paraba once minutos en el
+    `MessageBoxW` del desinstalador esperando un clic que no iba a llegar, y con
+    la salida en `-q` el registro ni siquiera decía en qué prueba estaba.
+
+    `MessageBoxTimeoutW` hace lo mismo y se rinde sola.
+    """
+    from gestor import desinstalacion, principal
+
+    culpables = []
+    for archivo in (RAIZ / 'gestor').rglob('*.py'):
+        codigo = archivo.read_text(encoding='utf-8')
+        # `MessageBoxTimeoutW(` no contiene `MessageBoxW(`, así que esto solo
+        # encuentra al que no tiene tope.
+        if 'MessageBoxW(' in codigo:
+            culpables.append(str(archivo.relative_to(RAIZ)))
+    assert not culpables, (
+        'estos sitios abren un cuadro de diálogo que espera para siempre: '
+        + ', '.join(culpables))
+
+    for modulo in (desinstalacion, principal):
+        assert 0 < modulo.ESPERA_MAXIMA_MS <= 300_000, modulo.__name__
 
 
 # ------------------------------------------------------------- el icono

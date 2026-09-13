@@ -70,12 +70,32 @@ class UnaSolaCopia:
             self._asa = None
 
 
+#: Cuánto se espera a que alguien cierre un aviso antes de seguir sin él. Un
+#: cartel que nadie lee no es un problema; esperar por él para siempre sí.
+ESPERA_MAXIMA_MS = 120_000
+MB_AL_FRENTE = 0x10000
+MB_ENCIMA_DE_TODO = 0x40000
+
+
 def avisar(texto: str, titulo: str = version.NOMBRE, error: bool = False) -> None:
-    """Un aviso que se vea aunque no haya ventana todavía."""
+    """Un aviso que se vea aunque no haya ventana todavía, y que no se eternice.
+
+    Con `MessageBoxW` a secas, el aviso **espera para siempre** a que alguien
+    pulse «Aceptar». Donde no hay nadie —el programa lanzado por una tarea
+    programada, por un script de inicio de sesión o por la propia comprobación
+    del empaquetado— eso deja el proceso colgado sin terminar nunca y sin un
+    error que explique nada. Es el mismo fallo que tuvo el desinstalador y que se
+    llevó tres publicaciones por delante.
+
+    Se dice igual por la salida de errores, así que el mensaje no se pierde
+    aunque el cartel se rinda o no se pueda abrir.
+    """
     if os.name == 'nt':
         try:
-            ctypes.windll.user32.MessageBoxW(None, texto, titulo, 0x10 if error else 0x40)
-            return
+            ctypes.windll.user32.MessageBoxTimeoutW(
+                None, texto, titulo,
+                (0x10 if error else 0x40) | MB_AL_FRENTE | MB_ENCIMA_DE_TODO,
+                0, ESPERA_MAXIMA_MS)
         except Exception:                                          # noqa: BLE001
             pass
     print(f'{titulo}: {texto}', file=sys.stderr)

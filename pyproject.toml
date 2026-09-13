@@ -110,6 +110,11 @@ ignore = [
 # sistema, y el programa que lanza es el que está ejecutándose.
 "gestor/autocomprobacion.py" = ["S310", "S603"]
 "gestor/registro.py" = ["S110"]
+# El desinstalador enseña dos carteles cuando ya ha terminado su trabajo. Que no
+# se puedan enseñar no cambia nada de lo que ya pasó, y no hay dónde apuntarlo:
+# la carpeta de datos —y con ella el registro— es justo lo que se acaba de
+# borrar.
+"gestor/desinstalacion.py" = ["S110"]
 
 
 

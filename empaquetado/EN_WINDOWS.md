@@ -1,6 +1,6 @@
 # Lo que solo se puede comprobar en Windows
 
-Todo lo demás de este proyecto se comprueba solo: `ruff`, 263 pruebas de pytest,
+Todo lo demás de este proyecto se comprueba solo: `ruff`, 280 pruebas de pytest,
 seis meses encadenados, cada norma sobre cada opción de cada mes, los 57
 controles de la pantalla pulsados y el contraste medido en claro y en oscuro. Y
 el propio ejecutable se comprueba a sí mismo al construirse.
@@ -122,6 +122,9 @@ Desde Configuración de Windows → Aplicaciones.
 
 - [ ] Pregunta si borrar los datos, y el botón que está marcado por defecto es
       **«No»**.
+- [ ] Si no contestas, a los dos minutos se rinde sola y **conserva los datos**.
+      Sin ese tope, una desinstalación en un equipo sin nadie delante se queda
+      esperando un clic para siempre: es lo que paró tres publicaciones.
 - [ ] Contestando «No», la carpeta `%LOCALAPPDATA%\GestorHorarios-datos` sigue
       ahí con todo dentro.
 - [ ] Contestando «Sí» (en una instalación de pruebas), la carpeta desaparece.
