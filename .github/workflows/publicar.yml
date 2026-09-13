@@ -31,6 +31,13 @@ jobs:
           pip install -r requisitos.txt
           pip install pyinstaller
 
+      - name: Dejar escrito con qué versiones se probó
+        # Un registro de publicación tiene que poder contestar «¿con qué se
+        # construyó aquello?» dentro de un año. Y si alguna vez las versiones
+        # vuelven a irse por su cuenta, esto lo deja a la vista en vez de que se
+        # note el día que algo se rompe sin que nadie haya tocado nada.
+        run: python -m pip list
+
       - name: Comprobar que la etiqueta y la versión del programa coinciden
         # Publicar la etiqueta v4.0.1 con el programa diciendo 4.0.0 deja a la
         # aplicación instalada creyendo que ya está al día. Se para aquí.

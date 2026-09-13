@@ -102,13 +102,34 @@ def llamadas_de_la_pantalla() -> set[tuple[str, str, str]]:
     return encontradas
 
 
+#: Lo que no es un verbo dentro de la descripción de un camino.
+NO_SON_VERBOS = {'parameters', 'servers', 'summary', 'description', 'head', 'options'}
+
+
 def rutas_del_servidor() -> set[tuple[str, str]]:
+    """Las direcciones que el servidor sirve, preguntándoselo a él.
+
+    Se lee del **esquema OpenAPI**, que es la descripción que FastAPI publica de
+    sí mismo, y no recorriendo `aplicacion.routes` a mano. Recorrer esa lista
+    funcionó durante meses y se rompió sin avisar: desde FastAPI 0.141,
+    `include_router` ya no vuelca las rutas ahí dentro —mete un envoltorio que ni
+    siquiera tiene `path`—, así que la lista salía con cero direcciones y esta
+    prueba denunciaba que **toda** la pantalla llamaba a sitios inexistentes.
+
+    Ochenta líneas de fallo apuntando a todas partes, o sea a ninguna. Y no
+    apareció al programar: apareció al publicar, porque aquí las versiones
+    estaban instaladas de hace meses y el flujo instala las últimas.
+
+    El esquema es la respuesta oficial a «¿qué sirves?», existe desde siempre y
+    no cambia de forma. Preguntar es mejor que deducir.
+    """
     from gestor.web.aplicacion import crear_aplicacion
-    aplicacion = crear_aplicacion()
-    return {(verbo, re.sub(r'\{[^}]*\}', '*', ruta.path))
-            for ruta in aplicacion.routes
-            if getattr(ruta, 'path', '').startswith('/api')
-            for verbo in (getattr(ruta, 'methods', set()) - {'HEAD', 'OPTIONS'})}
+    esquema = crear_aplicacion().openapi()
+    return {(verbo.upper(), re.sub(r'\{[^}]*\}', '*', camino))
+            for camino, operaciones in (esquema.get('paths') or {}).items()
+            if camino.startswith('/api')
+            for verbo in operaciones
+            if verbo.lower() not in NO_SON_VERBOS}
 
 
 def _patron(direccion: str) -> list[str]:
@@ -135,12 +156,30 @@ def test_la_pantalla_llama_a_rutas_que_existen(carpeta_de_datos):
     no hace nada y desde qué archivo se pulsa.
     """
     rutas = rutas_del_servidor()
+    llamadas = llamadas_de_la_pantalla()
+
+    # Antes de comparar, que haya **algo** de cada lado.
+    #
+    # Sin esto, que una de las dos listas saliera vacía se leía como «la pantalla
+    # entera llama a direcciones que no existen»: ochenta líneas de fallo que
+    # apuntan a todas partes, o sea a ninguna. Pasó de verdad, en una
+    # publicación, y costó dos vueltas entender que lo que fallaba era la lectura
+    # y no lo leído.
+    assert len(rutas) > 50, (
+        f'el servidor solo declaró {len(rutas)} direcciones, y tiene muchas más. '
+        'Lo que falla no son las llamadas de la pantalla: es que las rutas no se '
+        f'llegaron a leer.\n  Ejemplo de lo leído: {sorted(rutas)[:3]}')
+    assert len(llamadas) > 50, (
+        f'solo se leyeron {len(llamadas)} llamadas del JavaScript, y hay muchas '
+        'más. Lo que falla es la lectura de los archivos, no la pantalla.')
+
     huerfanas = sorted(
         f'{verbo:6} {direccion}  (desde {archivo})'
-        for verbo, direccion, archivo in llamadas_de_la_pantalla()
+        for verbo, direccion, archivo in llamadas
         if not _existe(verbo, direccion, rutas))
     assert not huerfanas, (
-        'la pantalla llama a direcciones que el servidor no tiene:\n  '
+        f'la pantalla llama a {len(huerfanas)} direcciones que el servidor no '
+        f'tiene (de {len(llamadas)} llamadas contra {len(rutas)} rutas):\n  '
         + '\n  '.join(huerfanas))
 
 

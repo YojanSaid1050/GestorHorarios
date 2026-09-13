@@ -1,42 +1,59 @@
 # Lo que el Gestor de Horarios necesita para funcionar.
 #
-# Las versiones van con un mínimo y un techo de versión mayor, no clavadas a un
-# número exacto. Clavarlas convierte cualquier parche de seguridad en un cambio
-# de código; dejarlas sueltas hace que el instalador que se probó y el que se
-# entrega puedan no ser el mismo programa. El techo por versión mayor es el
-# punto medio: entran las correcciones, no entran los cambios que rompen.
+# Las versiones van **clavadas**, y eso es un cambio de opinión que conviene
+# dejar escrito porque aquí estaba razonado al revés.
 #
-# Todas estas son las que la batería de pruebas ejecuta de verdad.
+# Antes iban con un mínimo y un techo de versión mayor —`fastapi>=0.104,<1.0`—
+# con este argumento: «entran las correcciones, no entran los cambios que
+# rompen». El argumento es bueno y **no se aplica aquí**, porque estos paquetes
+# están en versión 0.x y ahí el número del medio no promete nada. Entre 0.104 y
+# 0.141 de FastAPI cambió cómo `include_router` guarda las rutas, y un techo de
+# `<1.0` dejaba pasar ese cambio como si fuera un parche de seguridad.
+#
+# Lo que pasó: en el equipo donde se programa estaban instaladas las de hace
+# meses, y el flujo de publicación instalaba las últimas. O sea que **lo que se
+# probaba no era lo que se entregaba**, que es exactamente lo que ese comentario
+# decía querer evitar. Y no se notó al programar: se notó al publicar, con una
+# prueba denunciando que la pantalla entera llamaba a direcciones inexistentes.
+#
+# Con las versiones clavadas, el instalador que se prueba y el que se entrega
+# son el mismo programa. Subirlas es un cambio de código como cualquier otro:
+# se cambia el número, se pasa la batería y se ve qué se rompió, en vez de
+# enterarse el día de publicar.
 
-fastapi>=0.104,<1.0
-uvicorn>=0.24,<1.0
-pydantic>=2.5,<3.0
-openpyxl>=3.1,<4.0
+fastapi==0.141.1
+uvicorn==0.52.4
+pydantic==2.13.5
+openpyxl==3.1.5
 
 # Restaurar una copia de seguridad sube un archivo, y FastAPI necesita esto para
 # recibirlo. No es opcional aunque lo parezca: sin él, la ruta que lo recibe
 # revienta al **definirse**, o sea al arrancar la aplicación entera, no al usar
-# el botón. Estaba instalado aquí por venir con otra cosa, que es la forma de
-# que falte justo en el instalador y en ningún otro sitio.
-python-multipart>=0.0.9,<1.0
+# el botón. Estaba instalado por venir con otra cosa, que es la forma de que
+# falte justo en el instalador y en ningún otro sitio.
+python-multipart==0.0.32
 
 # La ventana de escritorio. En Windows usa el WebView2 que ya trae el sistema,
 # así que no hay un navegador entero dentro del instalador.
-pywebview>=5.3,<7.0
+pywebview==6.2.1
 
 # El instalador y las actualizaciones. Coloca cada versión en su propia carpeta
 # y solo al final cambia cuál es la buena: una actualización o está entera o no
 # está. Fuera de Windows no hace falta, y la aplicación arranca igual sin él.
-velopack>=1.2,<2.0 ; sys_platform == 'win32'
+velopack==1.2.0 ; sys_platform == 'win32'
 
 # --- solo para desarrollar y probar ---
-pytest>=8.3,<10.0
+pytest==9.1.1
 
 # Para que una prueba que se queda esperando **falle y cuente dónde**, en vez de
-# quedarse parada. No es comodidad: una batería colgada en una máquina de GitHub
-# corre hasta las seis horas, gasta minutos y no deja nada que leer. Con esto
-# vuelca la pila del punto exacto en el que se quedó, que es la única forma de
-# arreglar algo que solo pasa en un sistema que no tienes delante.
-pytest-timeout>=2.3,<3.0
-httpx>=0.27,<1.0
-ruff>=0.8,<1.0
+# quedarse parada. Una batería colgada en una máquina de GitHub corre hasta las
+# seis horas, gasta minutos y no deja nada que leer. Con esto vuelca la pila del
+# punto exacto en el que se quedó, que es la única forma de arreglar algo que
+# solo pasa en un sistema que no tienes delante.
+pytest-timeout==2.4.0
+
+httpx==0.28.1
+
+# Clavado con más motivo que ninguno: dos versiones distintas de ruff daban 0 y
+# 497 avisos sobre el mismo código sin haber cambiado una línea.
+ruff==0.16.7
