@@ -14,6 +14,10 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
+    # Sin esto, algo que se queda esperando corre hasta el tope de GitHub —seis
+    # horas— gastando minutos y sin decir nada. Con el tope aquí, un cuelgue se
+    # convierte en un fallo con su registro a los veinticinco minutos.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -41,7 +45,17 @@ jobs:
 
       - name: Pasar la batería de pruebas
         # No se publica lo que no pasa sus propias pruebas.
-        run: python -m pytest -q
+        #
+        # En claro y no en `-q`, a propósito: con `-q` la salida es una fila de
+        # puntos, y cuando una prueba se queda colgada el registro no dice cuál.
+        # Costó dos vueltas enteras averiguar dónde se había parado. Con `-v`
+        # cada nombre sale antes de ejecutarse, así que el último que aparece
+        # **es** el que no terminó.
+        #
+        # `-x` para en el primer fallo: aquí no interesa el listado completo,
+        # interesa no gastar una máquina Windows en las cuatrocientas pruebas
+        # que vienen después de la que ya falló.
+        run: python -m pytest -v -x --durations=15
 
       - name: Instalar vpk
         run: dotnet tool install -g vpk

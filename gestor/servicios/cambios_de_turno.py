@@ -315,17 +315,28 @@ def borrar_definitivo(empleado_id: int) -> dict:
                 'SELECT COUNT(*) n FROM ajustes_manuales WHERE empleado_id=?',
                 (empleado_id,)).fetchone()['n'],
         }
+        # El cursor se cierra siempre, también al encontrarlo a la primera.
+        #
+        # Antes esto era un `for` sobre `conexion.execute(...)` con un `break`
+        # dentro, y salir así deja la consulta **a medias**: para SQLite sigue
+        # habiendo una lectura en curso, con su candado puesto, hasta que alguien
+        # cierre la conexión. Cualquier cosa que necesitara un candado más fuerte
+        # se quedaba esperando detrás, sin error y sin mensaje.
         aparece = False
-        for fila in conexion.execute(
-                'SELECT datos_json FROM horarios WHERE oficial=1 OR publicado=1'):
-            try:
-                datos = json.loads(fila['datos_json'] or '{}')
-            except (TypeError, ValueError):
-                continue
-            if any(int(f.get('empleado_id') or 0) == int(empleado_id)
-                   for f in datos.get('horario') or []):
-                aparece = True
-                break
+        cursor = conexion.execute(
+            'SELECT datos_json FROM horarios WHERE oficial=1 OR publicado=1')
+        try:
+            for fila in cursor:
+                try:
+                    datos = json.loads(fila['datos_json'] or '{}')
+                except (TypeError, ValueError):
+                    continue
+                if any(int(f.get('empleado_id') or 0) == int(empleado_id)
+                       for f in datos.get('horario') or []):
+                    aparece = True
+                    break
+        finally:
+            cursor.close()
 
     bloqueos = [motivo for motivo, cuantos in cuentas.items() if cuantos]
     if aparece:

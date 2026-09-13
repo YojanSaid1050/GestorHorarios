@@ -30,7 +30,19 @@ def conectar() -> sqlite3.Connection:
     # WAL: permite leer mientras se escribe. La pantalla consulta mucho
     # mientras el motor está armando un mes, y sin esto se veía un «database is
     # locked» en medio de una generación larga.
-    conexion.execute('PRAGMA journal_mode = WAL')
+    #
+    # Se comprueba antes de ponerlo, y no es un ahorro: **cambiar de modo de
+    # diario pide un candado exclusivo sobre la base**, y esto se ejecutaba en
+    # cada conexión, decenas de veces por operación. Mientras otra conexión
+    # tuviera algo abierto, esa línea se quedaba esperando el candado. En Linux
+    # casi nunca se nota; en Windows, donde los candados de archivo son
+    # obligatorios y no orientativos, es una forma de quedarse parado sin un
+    # error, sin un mensaje y sin nada que mirar.
+    #
+    # El modo se guarda en el propio archivo, así que basta con ponerlo la
+    # primera vez. Preguntar es una lectura y no bloquea a nadie.
+    if conexion.execute('PRAGMA journal_mode').fetchone()[0].lower() != 'wal':
+        conexion.execute('PRAGMA journal_mode = WAL')
     return conexion
 
 

@@ -9,7 +9,6 @@ sabría por qué el horario no las recoge.
 """
 from __future__ import annotations
 
-import shutil
 import sqlite3
 import tempfile
 from datetime import date, datetime, timedelta
@@ -282,6 +281,53 @@ def _es_una_copia_de_este_programa(ruta) -> str:
     return ''
 
 
+def _copiar_base(origen, destino) -> None:
+    """Copiar una base de SQLite **con SQLite**, no con el sistema de archivos.
+
+    La base trabaja en modo WAL, y eso significa que lo escrito hace un momento
+    puede estar todavía en `horarios.db-wal` y no dentro de `horarios.db`. Copiar
+    el archivo suelto, que es lo que se hacía, produce una copia a la que le
+    faltan las últimas operaciones —justo las que interesan— y lo hace en
+    silencio: el archivo existe, pesa lo suyo y abre bien.
+
+    `Connection.backup` copia la base entera tal y como está, WAL incluido.
+    """
+    con_origen = sqlite3.connect(origen)
+    try:
+        con_destino = sqlite3.connect(destino)
+        try:
+            con_origen.backup(con_destino)
+        finally:
+            con_destino.close()
+    finally:
+        con_origen.close()
+
+
+def _restaurar_encima(candidata) -> None:
+    """Volcar la copia elegida dentro de la base de trabajo.
+
+    También con SQLite y no con el sistema de archivos, y aquí importa el doble:
+
+    * al lado de `horarios.db` viven `-wal` y `-shm`. Sustituyendo solo el
+      archivo principal, esos dos se quedan con el contenido de **la base
+      anterior** y SQLite los aplica encima de la recién restaurada. Lo que
+      queda no es ni lo uno ni lo otro;
+    * en Windows no se puede sobrescribir un archivo que alguien tiene abierto.
+      Copiando por encima, restaurar fallaba o se quedaba esperando a un
+      candado, que es como llegar al peor día con un problema más.
+
+    Volcando con `backup` no se toca ningún archivo por fuera: es la propia
+    SQLite la que reemplaza el contenido, en una operación y con los candados
+    que hagan falta.
+    """
+    origen = sqlite3.connect(f'file:{candidata}?mode=ro', uri=True)
+    try:
+        with abierta() as destino:
+            origen.backup(destino)
+    finally:
+        origen.close()
+
+
 @router.post('/restore')
 async def restaurar(peticion: Request, archivo: UploadFile = File(...)):
     """Vuelve a una copia. Antes guarda otra de lo que hay ahora.
@@ -314,8 +360,8 @@ async def restaurar(peticion: Request, archivo: UploadFile = File(...)):
                 f'programa: {problema}. No se ha tocado nada. Busca un archivo '
                 'de los que crea el propio programa, que terminan en .db.')
         antes = rutas.COPIAS / f'antes_de_restaurar_{datetime.now():%Y%m%d_%H%M%S}.db'
-        shutil.copy2(rutas.BASE_DE_DATOS, antes)
-        shutil.copy2(candidata, rutas.BASE_DE_DATOS)
+        _copiar_base(rutas.BASE_DE_DATOS, antes)
+        _restaurar_encima(candidata)
     finally:
         Path(candidata).unlink(missing_ok=True)
 
