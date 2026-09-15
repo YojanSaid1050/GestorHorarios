@@ -1,13 +1,15 @@
 # Lo que solo se puede comprobar en Windows
 
-Todo lo demás de este proyecto se comprueba solo: `ruff`, 283 pruebas de pytest,
+Todo lo demás de este proyecto se comprueba solo: `ruff`, las pruebas de pytest,
 seis meses encadenados, cada norma sobre cada opción de cada mes, los 57
-controles de la pantalla pulsados y el contraste medido en claro y en oscuro. Y
-el propio ejecutable se comprueba a sí mismo al construirse.
+controles de la pantalla pulsados, la barra de la ventana conducida con un ratón
+de verdad y el contraste medido en claro y en oscuro. Y el propio ejecutable se
+comprueba a sí mismo al construirse.
 
 Queda esto, que necesita un Windows de verdad porque depende de cosas que el
 sistema pone y no el programa: el candado entre procesos, los diálogos nativos,
-y un instalador reemplazando otro en su sitio.
+una ventana sin marco moviéndose y estirándose, y un instalador reemplazando otro
+en su sitio.
 
 Son unos veinte minutos. Hazlo **en un equipo que no sea el de la oficina**, o al
 menos después de una copia de seguridad: dos de estos pasos borran datos a
@@ -59,6 +61,50 @@ si pintaba colores— y desde una terminal habría abierto sin una queja.
 
 Entra con `admin`. Genera octubre de 2026 y exporta el Excel: con eso ya has
 pasado por casi todo el programa.
+
+## 1b · La ventana  ← lo único sin red debajo
+
+De todo el proyecto, esto es lo único que no comprueba nadie salvo tú. Por eso
+**viene apagado**: la ventana se abre con el marco de Windows de siempre.
+
+Para probar esta sección hay que encenderlo primero: Configuración → «Barra de la
+ventana» → «La del programa», cerrar y volver a abrir. Entonces la ventana va sin
+marco y con la barra pintada por el propio programa. La barra, sus botones y los tiradores del borde sí están comprobados
+—`qa/ventana.py` los conduce con un ratón de verdad, fingiendo pywebview—, pero
+lo que hace el sistema con una ventana sin marco no se puede fingir desde Linux.
+
+Si algo de esto va mal, **no hay que reinstalar nada**: Configuración →
+«Barra de la ventana» → «La de Windows», cerrar y volver a abrir. Ese interruptor
+existe justo para esto.
+
+- [ ] Arrastrando la barra de título, la ventana se mueve, y se queda donde la
+      sueltas.
+- [ ] Arrastrando **cualquier otro sitio** —una tabla, un texto— la ventana
+      **no** se mueve. Si se mueve, se puede seleccionar nada y la aplicación es
+      inusable: es el fallo grave de esta función.
+- [ ] Los tres botones de la derecha minimizan, maximizan y cierran.
+- [ ] Doble clic en la barra maximiza, y otro doble clic la devuelve.
+- [ ] Maximizada, el botón del medio enseña el icono de restaurar, no el de
+      maximizar.
+- [ ] Arrastrando **cada uno de los cuatro bordes** la ventana cambia de tamaño,
+      y el borde de enfrente se queda quieto: tirando del izquierdo, el derecho
+      no se mueve.
+- [ ] Y las cuatro esquinas cambian las dos medidas a la vez.
+- [ ] Por pequeña que la hagas, no baja de 1100×700: la cuadrícula del horario
+      tiene que seguir cabiendo.
+- [ ] Maximizada, los bordes ya no estiran nada.
+- [ ] Cierra y vuelve a abrir: **la ventana vuelve con el tamaño y en el sitio
+      donde la dejaste**. Déjala maximizada, cierra y abre: abre maximizada.
+- [ ] Con dos monitores: deja la ventana en el segundo, cierra, **desconecta el
+      segundo monitor** y abre. Tiene que abrir centrada en el que queda, no en
+      un sitio invisible.
+- [ ] Cambia a «La de Windows», cierra y abre: sale el marco gris de siempre y
+      **no** hay dos barras de título, una debajo de otra.
+
+Lo que se pierde sin marco y no se recupera es el ajuste a los lados de Windows
+(arrastrar la ventana contra un borde para que ocupe media pantalla). `Win` +
+flechas sigue funcionando. Si en la oficina usan mucho ese gesto, la respuesta es
+el interruptor.
 
 ## 2 · El candado
 

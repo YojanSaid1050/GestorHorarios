@@ -9,6 +9,44 @@
 <link rel="stylesheet" href="/ui-system.css?v=3.6.2">
 </head>
 <body class="auth-locked">
+<!-- La barra de título del programa.
+     Se ve solo cuando la ventana se abre sin el marco de Windows, y eso lo
+     contesta la propia ventana (`window.pywebview.api.barra_propia()`), no el
+     servidor: esta barra tiene que funcionar en la pantalla de acceso, antes de
+     que haya sesión, o no habría forma de mover ni de cerrar la ventana hasta
+     después de entrar. En un navegador no aparece nunca.
+     La clase `pywebview-drag-region` es la que hace que la ventana se arrastre
+     desde aquí, y va solo en la zona del título: si estuviera en toda la barra,
+     los botones de la derecha moverían la ventana en vez de pulsarse. -->
+<div id="barra-ventana" class="window-bar hidden">
+    <div class="window-bar-drag pywebview-drag-region" id="barra-ventana-arrastre" title="Arrastra para mover la ventana; doble clic para maximizar">
+        <img class="window-bar-logo" src="/GestorHorarios.png" alt="">
+        <span class="window-bar-titulo" id="barra-ventana-titulo">Gestor de Horarios</span>
+    </div>
+    <div class="window-bar-botones">
+        <button id="ventana-minimizar" type="button" class="window-bar-boton" title="Minimizar" aria-label="Minimizar la ventana">
+            <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.5h7"/></svg>
+        </button>
+        <button id="ventana-maximizar" type="button" class="window-bar-boton" title="Maximizar" aria-label="Maximizar o restaurar la ventana">
+            <svg class="icono-maximizar" viewBox="0 0 12 12" aria-hidden="true"><rect x="2.4" y="2.4" width="7.2" height="7.2" rx="1"/></svg>
+            <svg class="icono-restaurar" viewBox="0 0 12 12" aria-hidden="true"><path d="M4.1 4.1h5.5v5.5H4.1z"/><path d="M2.4 7.9V2.4h5.5"/></svg>
+        </button>
+        <button id="ventana-cerrar" type="button" class="window-bar-boton window-bar-cerrar" title="Cerrar" aria-label="Cerrar la aplicación">
+            <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3.2 3.2l5.6 5.6M8.8 3.2l-5.6 5.6"/></svg>
+        </button>
+    </div>
+</div>
+<!-- Los ocho tiradores del borde.
+     Una ventana sin marco no se puede redimensionar con el ratón: quitarle el
+     marco le quita el borde que se agarra. Estas ocho bandas invisibles lo
+     devuelven, llamando a la ventana mientras se arrastran. Como la barra, solo
+     existen cuando no hay marco. -->
+<div id="tiradores-ventana" class="window-grips hidden" aria-hidden="true">
+    <span data-borde="n"></span><span data-borde="s"></span>
+    <span data-borde="o"></span><span data-borde="e"></span>
+    <span data-borde="no"></span><span data-borde="ne"></span>
+    <span data-borde="so"></span><span data-borde="se"></span>
+</div>
 <header class="topbar">
     <div>
         <h1>Programación mensual de turnos</h1>
@@ -67,6 +105,7 @@
         <div class="nav-sub" id="nav-configuracion">
             <button type="button" data-ir-config="tarjeta-regla-racha">Jornadas seguidas</button>
             <button type="button" data-ir-config="tarjeta-reglas-cobertura">Reparto por área</button>
+            <button type="button" data-ir-config="cfg-ventana">Barra de la ventana</button>
             <button type="button" data-ir-config="cfg-modo">Claro u oscuro</button>
             <button type="button" data-ir-config="cfg-apariencia">Color de la aplicación</button>
             <button type="button" data-ir-config="cfg-colores">Colores del Excel</button>
@@ -844,7 +883,7 @@
             <div class="actions"><button id="limpiar-historial" type="button" class="secondary">Borrar el historial</button></div>
         </div>
         <div class="audit-filters">
-            <label>Tipo<select id="historial-tipo"><option value="">Todos</option><option value="empleado">Personal</option><option value="solicitud">Solicitudes</option><option value="requerimiento">Asignaciones</option><option value="horario">Horarios</option><option value="semana">Semanas</option><option value="configuracion">Configuración</option></select></label>
+            <label>Tipo<select id="historial-tipo"><option value="">Todos</option><option value="empleado">Personal</option><option value="solicitud">Solicitudes</option><option value="asignacion">Asignaciones</option><option value="horario">Horarios</option><option value="configuracion">Configuración</option><option value="seguridad">Seguridad</option><option value="sistema">Sistema</option></select></label>
             <label>Buscar<input id="historial-buscar" type="search" placeholder="Persona, acción, fecha o detalle"></label>
         </div>
         <div class="scroll lista audit-scroll">
@@ -903,6 +942,26 @@
             <p>El <b>reparto normal</b> es a lo que apunta la rotación cuando no pasa nada raro: por ejemplo, 2 personas en AM y 1 en PM en Comunicaciones.</p>
             <p>El <b>mínimo obligatorio</b> es el suelo que nunca se baja. Es lo que impide que alguien descanse un día si con eso el área se quedaría sin nadie. Si dejas el reparto normal en blanco, el área lo calcula sola según la gente que tenga, como hace Gestión Social con sus turnos fijos.</p>
         </details>
+    </div>
+
+    <div class="card" id="cfg-ventana">
+        <div class="section-head">
+            <div>
+                <h2>Barra de la ventana</h2>
+                <p>La franja de arriba con el título y los botones de minimizar, maximizar y cerrar. La del programa va con los colores de la aplicación y ocupa menos alto; la de Windows es la gris de siempre y trae de serie el ajuste a los lados al arrastrarla contra un borde de la pantalla. <strong>De fábrica va la de Windows.</strong> La del programa está terminada, pero es lo único de toda la aplicación que no se puede comprobar sin un Windows delante, así que se entrega apagada: enciéndela aquí, cierra y vuelve a abrir, y si en este equipo se porta mal vuelve atrás por el mismo sitio. No hay que reinstalar nada.</p>
+            </div>
+        </div>
+        <div class="modo-app" role="group" aria-label="Barra de título de la ventana">
+            <button type="button" data-barra-opcion="propia" aria-pressed="false">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.8" y="4.2" width="18.4" height="15.6" rx="2"/><path d="M2.8 8.4h18.4M17.6 6.3h1.4"/></svg>
+                La del programa
+            </button>
+            <button type="button" data-barra-opcion="windows" aria-pressed="false">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.8" y="4.2" width="18.4" height="15.6" rx="2"/><path d="M2.8 9.6h18.4M13.4 6.9h1.3M16.2 6.9h1.3M19 6.9h1.3"/></svg>
+                La de Windows
+            </button>
+        </div>
+        <small class="muted modo-app-nota" id="barra-ventana-nota">El cambio se ve la próxima vez que abras la aplicación.</small>
     </div>
 
     <div class="card" id="cfg-modo">
@@ -1250,5 +1309,6 @@
 <script src="/js/12-reparto-areas.js?v=3.6.2"></script>
 <script src="/js/13-modificar.js?v=3.6.2"></script>
 <script src="/js/14-arranque.js?v=3.6.2"></script>
+<script src="/js/15-ventana.js?v=3.6.2"></script>
 </body>
 </html>

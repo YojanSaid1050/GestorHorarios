@@ -10,7 +10,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from gestor.servicios import apariencia, historial
+from gestor.servicios import apariencia, historial, marco
 
 router = APIRouter(prefix='/api/configuracion', tags=['apariencia'])
 
@@ -25,6 +25,10 @@ class Tema(BaseModel):
 
 class Paleta(BaseModel):
     paleta: str
+
+
+class BarraDeVentana(BaseModel):
+    propia: bool
 
 
 @router.get('/modo-app')
@@ -125,3 +129,32 @@ def aplicar_paleta(paleta: Paleta):
             'paletas': apariencia.listar_paletas_excel(),
             'mensaje': ('Se aplicó la paleta. Puedes seguir ajustando cualquier '
                         'color por separado.')}
+
+
+@router.get('/barra-ventana')
+def ver_barra_de_ventana():
+    """Con qué barra de título se abre la ventana del programa.
+
+    La pantalla no usa esto para decidir si pintar la barra —eso lo contesta la
+    propia ventana, que sabe cómo se creó y contesta antes de iniciar sesión—,
+    sino para enseñar el interruptor en Configuración como está.
+    """
+    return {'ok': True, 'propia': marco.barra_propia(),
+            'aviso': 'El cambio se ve la próxima vez que abras la aplicación.'}
+
+
+@router.put('/barra-ventana')
+def poner_barra_de_ventana(barra: BarraDeVentana):
+    """Cambiar de barra. Se nota al volver a abrir, no ahora.
+
+    El marco de una ventana se decide al crearla y no se puede quitar ni poner
+    con la ventana abierta, así que decirlo claro aquí evita la duda de haber
+    pulsado y no ver nada.
+    """
+    propia = marco.poner_barra_propia(barra.propia)
+    historial.anotar('cambiar_barra_ventana', 'configuracion', {'propia': propia})
+    return {'ok': True, 'propia': propia, 'mensaje': (
+        'Al abrir la aplicación de nuevo, la barra de título será la del '
+        'programa.' if propia else
+        'Al abrir la aplicación de nuevo, la barra de título será la de Windows, '
+        'con sus botones de siempre.')}

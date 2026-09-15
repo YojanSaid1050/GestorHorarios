@@ -261,7 +261,11 @@ input[type="date"],input[type="month"]{cursor:pointer;background-color:var(--sur
 .manual-diagnostics{margin-top:14px;display:grid;gap:8px}
 .manual-diagnostic-item{padding:11px 13px;border:1px solid var(--border);border-radius:11px;background:var(--surface)}
 .manual-diagnostic-item strong{display:block;margin-bottom:4px}
-.manual-diagnostic-item.blocked,.manual-diagnostic-item.bloqueado{border-left:4px solid var(--danger)}
+/* `no_aplicado` es el estado que el servidor emite de verdad cuando un cambio
+   manual no se pudo poner. Sin él aquí, ese aviso salía con el borde gris de
+   los demás: el único que exige hacer algo era el que menos se veía. */
+.manual-diagnostic-item.blocked,.manual-diagnostic-item.bloqueado,
+.manual-diagnostic-item.no_aplicado{border-left:4px solid var(--danger)}
 .manual-diagnostic-item.forced,.manual-diagnostic-item.forzado{border-left:4px solid var(--warn)}
 .manual-diagnostic-item.applied,.manual-diagnostic-item.aplicado{border-left:4px solid var(--ok)}
 .manual-diagnostic-item.heredado{border-left:4px solid var(--purple-mid,#7d4aa8)}
@@ -694,3 +698,90 @@ td.shift-CAP{color:var(--schedule-CAP-text, inherit)}
 .coverage-question .date-field { width: 100%; }
 .coverage-rule .coverage-rule-actions { margin-top: 16px; }
 
+
+
+/* ================================================================
+   V4.1 · la barra de título del propio programa
+   ================================================================
+   Solo se ve cuando la ventana se abre sin el marco de Windows. En un
+   navegador, y con el marco puesto, `#barra-ventana` se queda con la clase
+   `hidden` y de aquí no se aplica nada.
+
+   Va por encima de TODO, incluida la pantalla de acceso (z-index 20000): es la
+   única forma de mover o de cerrar la ventana, y antes de entrar hace todavía
+   más falta que después.
+
+   `-webkit-app-region` no sirve aquí —eso es de Electron—: quien mueve la
+   ventana es pywebview, mirando la clase `pywebview-drag-region`. */
+.window-bar{
+    position:sticky;top:0;z-index:30000;
+    display:flex;align-items:stretch;
+    height:38px;
+    background:var(--brand-deep,var(--purple-dark));
+    color:#fff;
+    border-bottom:1px solid #ffffff1f;
+    user-select:none;
+}
+.window-bar-drag{
+    flex:1;min-width:0;
+    display:flex;align-items:center;gap:9px;
+    padding:0 6px 0 12px;
+    /* El cursor de flecha y no el de texto: esto no es contenido, es marco. */
+    cursor:default;
+}
+.window-bar-logo{width:19px;height:19px;object-fit:contain;border-radius:4px;flex:0 0 19px}
+.window-bar-titulo{
+    font-size:12.5px;font-weight:650;letter-spacing:.01em;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    opacity:.92;
+}
+.window-bar-botones{display:flex;align-items:stretch;flex:0 0 auto}
+.window-bar-boton{
+    width:46px;height:100%;padding:0;
+    display:grid;place-items:center;
+    background:transparent;border:0;border-radius:0;
+    color:#fff;cursor:default;
+}
+.window-bar-boton svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:1.15;
+    stroke-linecap:round;stroke-linejoin:round}
+.window-bar-boton:hover{background:#ffffff22;filter:none}
+.window-bar-boton:active{background:#ffffff33}
+/* El de cerrar en rojo al pasar por encima, como en cualquier ventana: es el
+   único de los tres que no tiene vuelta atrás y conviene que se distinga. */
+.window-bar-cerrar:hover{background:#c42b1c}
+.window-bar-cerrar:active{background:#a8271a}
+.window-bar-boton:focus-visible{outline:2px solid #ffffffcc;outline-offset:-3px}
+/* Maximizar y restaurar son el mismo botón: se enseña el icono que toca. */
+.window-bar .icono-restaurar,
+.window-bar.maximizada .icono-maximizar{display:none}
+.window-bar.maximizada .icono-restaurar{display:block}
+
+/* Los ocho tiradores del borde.
+   Devuelven lo que quitar el marco se lleva: poder redimensionar con el ratón.
+   Cuatro píxeles, que es poco pero suficiente para agarrarlos, y a propósito:
+   la barra de desplazamiento de la página vive pegada al borde derecho y con
+   una banda más ancha dejaría de poderse arrastrar. */
+.window-grips>span{position:fixed;z-index:31000}
+.window-grips>span[data-borde="n"]{top:0;left:10px;right:10px;height:4px;cursor:ns-resize}
+.window-grips>span[data-borde="s"]{bottom:0;left:10px;right:10px;height:4px;cursor:ns-resize}
+.window-grips>span[data-borde="o"]{left:0;top:10px;bottom:10px;width:4px;cursor:ew-resize}
+.window-grips>span[data-borde="e"]{right:0;top:10px;bottom:10px;width:4px;cursor:ew-resize}
+.window-grips>span[data-borde="no"]{top:0;left:0;width:10px;height:10px;cursor:nwse-resize}
+.window-grips>span[data-borde="se"]{bottom:0;right:0;width:10px;height:10px;cursor:nwse-resize}
+.window-grips>span[data-borde="ne"]{top:0;right:0;width:10px;height:10px;cursor:nesw-resize}
+.window-grips>span[data-borde="so"]{bottom:0;left:0;width:10px;height:10px;cursor:nesw-resize}
+/* Maximizada no hay bordes que arrastrar, y dejarlos puestos permitiría
+   estirar una ventana que ocupa ya la pantalla entera. */
+.window-grips.quieta>span{display:none}
+
+/* La pantalla de acceso desenfoca lo que hay detrás. La barra no: es marco de
+   ventana, no contenido, y tiene que poder pulsarse y leerse igual. */
+body.auth-locked>.window-bar,
+body.auth-locked>.window-grips{filter:none;pointer-events:auto}
+
+/* La barra va pegada arriba, así que saltar a una tarjeta tiene que dejarle
+   hueco: sin esto el título de la tarjeta queda medio tapado. Es la altura de
+   la barra más un respiro. */
+body.con-barra-propia .card,
+body.con-barra-propia .cfg-grupo,
+body.con-barra-propia .tab{scroll-margin-top:50px}

@@ -1,6 +1,6 @@
 # La pantalla, por partes
 
-Esto era un solo archivo, `app.js`, de 6.577 líneas. Ahora son catorce, uno por
+Esto era un solo archivo, `app.js`, de 6.577 líneas. Ahora son quince, uno por
 zona de la aplicación, y el navegador los carga en orden desde `index.html`.
 
 ## Por qué así y no con módulos ES
@@ -16,10 +16,14 @@ Un `onclick` escrito así solo encuentra funciones **globales**. Con módulos ES
 manejadores de este tipo dejarían de funcionar en el acto.
 
 Por eso son archivos sueltos cargados en orden, que comparten el ámbito global
-igual que antes. Tiene una consecuencia muy útil: **concatenar los catorce
-archivos devuelve el `app.js` original, línea por línea**. No hay que confiar en
-que la partición no cambió nada; se comprueba, y hay una prueba que lo hace en
-cada ejecución de la batería.
+igual que antes. Al partirlo, **concatenar los archivos del uno al catorce
+devolvía el `app.js` original línea por línea**, que es como se comprobó que la
+partición no había cambiado nada.
+
+Aquello era una comprobación de un día, no una regla: desde entonces el código ha
+seguido cambiando dentro de cada archivo y ya no reconstruye nada. Lo que sí sigue
+valiendo es el orden. El `15-ventana` es posterior a aquel archivo: código nuevo,
+no un trozo del original.
 
 ## El orden importa
 
@@ -46,3 +50,4 @@ ponlo al final o donde de verdad corresponda, y añádelo a `index.html`.
 | `12-reparto-areas` | El reparto AM/PM de cada área |
 | `13-modificar` | Modificar el horario: semanas, cambios a mano, reprogramar |
 | `14-arranque` | Recordar la contraseña, la carga inicial, la guía y el calendario |
+| `15-ventana` | La barra de título propia: mover, los tres botones y estirar los bordes |

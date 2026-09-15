@@ -232,12 +232,12 @@ def abrir() -> int:
         except KeyboardInterrupt:
             return 0
 
+    from gestor import escritorio
     from gestor.servicios import ventana as servicio_ventana
 
-    marco = webview.create_window(
-        f'{version.NOMBRE} {version.VERSION}', f'http://{HOST}:{puerto}',
-        width=1440, height=900, min_size=(1100, 700), confirm_close=False)
-    servicio_ventana.registrar(marco)
+    ventana, _puente = escritorio.crear(
+        f'http://{HOST}:{puerto}', f'{version.NOMBRE} {version.VERSION}')
+    servicio_ventana.registrar(ventana)
     try:
         webview.start()
     finally:
