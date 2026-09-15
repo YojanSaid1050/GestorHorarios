@@ -289,9 +289,17 @@ function renderDiagnosticoManual(items = [], reglasGenerales = []) {
         html += `<div class="manual-diagnostic-item bloqueado"><strong>Reglas que impiden generar una alternativa</strong><ul>${reglasGenerales.map(m=>`<li>${esc(m)}</li>`).join('')}</ul></div>`;
     }
     html += items.map(x => {
-        const detalles = [...(x.bloqueos || []), ...(x.excepciones || [])];
+        // `detalles`, que es como lo manda `gestor/servicios/edicion.py`. Con
+        // los nombres de antes, un cambio aplicado como excepción decía
+        // «Aplicado con excepción» y **no decía excepción de qué**.
+        const detalles = x.detalles || [];
         const estado = x.estado || 'revisar';
+        // Los tres estados que el servidor emite de verdad son `no_aplicado`,
+        // `forzado` y `aplicado`. `no_aplicado` —el más importante de los tres,
+        // porque es el cambio que NO se pudo poner— no estaba en esta lista:
+        // caía en «Revisar», con la misma pinta gris que todo lo demás.
         const titulosEstado = {
+            no_aplicado: 'No se pudo aplicar',
             bloqueado: 'No se puede aplicar todavía',
             forzado: 'Aplicado con excepción',
             aplicado: 'Aplicado',
@@ -534,20 +542,30 @@ function hayCambiosPendientesDe(origen) {
     return contarCambiosPendientesDe(origen) > 0;
 }
 
+// Cuántos cambios pendientes vienen de las solicitudes y cuántos de las
+// asignaciones.
+//
+// Se mira `origen`, que es el único campo que el servidor pone de verdad en
+// cada razón, junto con `mensaje` (ver `gestor/servicios/periodos.py`). Antes
+// se buscaban `tipo`, `solicitud_id`, `requerimiento_id` y `grupo_id`, que no
+// existen en ninguna parte del programa: esta función **devolvía cero siempre**.
+//
+// Cero aquí no se notaba como un fallo, se notaba como cuatro botones
+// apagados: los dos de «actualizar desde…» y los dos de «aplicar…» quedaban
+// deshabilitados para siempre, y su globo de ayuda decía que no había cambios
+// pendientes mientras la pestaña de al lado avisaba de que sí los había.
 function contarCambiosPendientesDe(origen) {
+    const deEsteOrigen = origen === 'solicitudes'
+        ? ['solicitudes']
+        : ['asignaciones', 'requerimientos'];
     const razones = Object.values(estadoPeriodoActual?.areas || {})
         .filter(x => x?.requiere_actualizacion)
         .flatMap(x => x?.razones || [])
-        .filter(r => r?.mostrar_en_estado !== false);
-    const filtradas = razones.filter(r => origen === 'solicitudes'
-        ? (r?.solicitud_id || String(r?.tipo || '').includes('solicitud'))
-        : (r?.requerimiento_id || r?.grupo_id || /requerimiento|asignacion/.test(String(r?.tipo || ''))));
-    const claves = new Set(filtradas.map(r =>
-        r.solicitud_id ? `s:${r.solicitud_id}`
-            : r.grupo_id ? `g:${r.grupo_id}`
-                : r.requerimiento_id ? `r:${r.requerimiento_id}`
-                    : `${r.tipo || origen}:${r.mensaje || ''}`));
-    return claves.size;
+        .filter(r => r?.mostrar_en_estado !== false)
+        .filter(r => deEsteOrigen.includes(String(r?.origen || '')));
+    // Sin repetir: el servidor ya evita apuntar dos veces el mismo motivo, pero
+    // la misma razón aparece una vez por área y aquí se juntan las tres.
+    return new Set(razones.map(r => `${r.origen}:${r.mensaje || ''}`)).size;
 }
 
 const CONTENIDO_BOTON_OCUPADO = new WeakMap();
@@ -1133,22 +1151,74 @@ $('publicar-horario').onclick = async () => {
 
 
 let auditoriaItems = [];
+// El vocabulario del Historial.
+//
+// Las claves son **exactamente** los nombres que el servidor escribe con
+// `historial.anotar(...)`. Estaban escritas de memoria y casi ninguna coincidía:
+// el servidor apunta `alta_personal` y aquí se esperaba `crear_empleado`,
+// apunta `crear_asignacion` y aquí `crear_requerimiento`, apunta `marcar_oficial`
+// y aquí `horario_oficial`. De las cincuenta acciones que el programa registra,
+// acertaban once: el resto salía como «Cambio registrado».
+//
+// Y no era solo feo: el buscador de esta pantalla busca sobre el texto ya
+// traducido, así que escribir «personal» o «asignación» no encontraba nada.
+//
+// `pruebas/test_historial.py` comprueba que no falte ninguna.
 function nombreAccionHistorial(accion='') {
     const mapa={
-        crear_requerimiento:'Asignación creada', crear_requerimiento_masivo:'Asignación para grupo creada',
-        cancelar_requerimiento:'Asignación cancelada', eliminar_requerimiento:'Asignación eliminada', cancelar_grupo_requerimientos:'Asignación para grupo cancelada',
-        eliminar_grupo_requerimientos:'Asignación para grupo eliminada', finalizar_requerimiento:'Asignación finalizada',
-        crear_solicitud:'Solicitud creada', aprobar_solicitud:'Solicitud aprobada', rechazar_solicitud:'Solicitud rechazada', cancelar_solicitud:'Solicitud cancelada', eliminar_solicitud:'Solicitud eliminada',
-        publicar_horario:'Horario publicado', reprogramacion_parcial:'Horario reorganizado', modificar_horario_manual:'Cambio manual de horario', generar_horario:'Horario generado', horario_oficial:'Horario marcado como oficial',
-        desactivar_empleado:'Empleado desactivado', reactivar_empleado:'Empleado reactivado', editar_empleado:'Personal modificado', crear_empleado:'Empleado creado', eliminar_empleado_definitivo:'Empleado eliminado definitivamente',
-        cambiar_festivo:'Festivo modificado', restaurar_festivo:'Festivo restaurado', crear_backup:'Copia de seguridad creada', restaurar_backup:'Copia restaurada', reiniciar_programacion:'Programación reiniciada', reiniciar_fabrica:'Aplicación restablecida',
-        iniciar_sesion:'Inicio de sesión', cerrar_sesion:'Cierre de sesión', cambiar_password:'Contraseña actualizada', establecer_password_usuario:'Contraseña de usuario configurada',
-        cerrar_semana:'Semana cerrada', habilitar_semana:'Semana habilitada', cambiar_semana:'Estado de semana actualizado', cambiar_tema:'Apariencia actualizada', cambiar_colores:'Colores actualizados'
+        // Personal
+        alta_personal:'Personal dado de alta', cambio_personal:'Personal modificado',
+        retiro_personal:'Personal retirado', reactivacion_personal:'Personal reactivado',
+        borrar_personal:'Personal eliminado definitivamente',
+        cambio_turno:'Cambio de turno programado', corregir_cambio_turno:'Cambio de turno corregido',
+        deshacer_cambio_turno:'Cambio de turno deshecho',
+        // Solicitudes
+        crear_solicitud:'Solicitud creada', editar_solicitud:'Solicitud corregida',
+        aprobar_solicitud:'Solicitud aprobada', rechazar_solicitud:'Solicitud rechazada',
+        cancelar_solicitud:'Solicitud cancelada', borrar_solicitud:'Solicitud eliminada',
+        solicitud_pendiente:'Solicitud devuelta a pendiente',
+        limpiar_solicitudes:'Solicitudes depuradas',
+        // Asignaciones
+        crear_asignacion:'Asignación creada', crear_asignacion_masiva:'Asignación para grupo creada',
+        editar_asignacion:'Asignación corregida', cancelar_asignacion:'Asignación cancelada',
+        cancelar_grupo_asignacion:'Asignación para grupo cancelada',
+        borrar_asignacion:'Asignación eliminada',
+        borrar_grupo_asignacion:'Asignación para grupo eliminada',
+        limpiar_asignaciones:'Asignaciones depuradas',
+        // Horario
+        generar_horario:'Horario generado', marcar_oficial:'Horario marcado como oficial',
+        deshacer_oficial:'Horario oficial deshecho', publicar_horario:'Horario publicado',
+        reprogramacion_parcial:'Horario reorganizado',
+        quitar_cambio_manual:'Cambio manual retirado', exportar_excel:'Excel exportado',
+        cerrar_semana:'Semana cerrada', habilitar_semana:'Semana habilitada',
+        // Configuración
+        mover_festivo:'Festivo movido', restaurar_festivo:'Festivo restaurado',
+        guardar_regla_cobertura:'Reparto por área guardado',
+        borrar_regla_cobertura:'Reparto por área eliminado',
+        guardar_regla_operacion:'Regla del horario guardada',
+        borrar_regla_operacion:'Regla del horario eliminada',
+        cambiar_modo_app:'Claro u oscuro cambiado', cambiar_tema_app:'Color de la aplicación cambiado',
+        restablecer_tema_app:'Color de la aplicación restablecido',
+        aplicar_paleta_excel:'Paleta del Excel aplicada',
+        cambiar_barra_ventana:'Barra de la ventana cambiada',
+        reiniciar_programacion:'Programación reiniciada',
+        reiniciar_fabrica:'Aplicación restablecida de fábrica',
+        // Seguridad y sistema
+        inicio_sesion:'Inicio de sesión', crear_usuario:'Cuenta creada',
+        estado_usuario:'Cuenta activada o desactivada',
+        cambiar_clave_propia:'Contraseña propia actualizada',
+        cambiar_clave_usuario:'Contraseña de otra cuenta actualizada',
+        crear_copia:'Copia de seguridad creada', restaurar_copia:'Copia restaurada',
     };
     return mapa[accion] || 'Cambio registrado';
 }
 function nombreEntidadHistorial(entidad='') {
-    const mapa={empleado:'Personal',solicitud:'Solicitudes',requerimiento:'Asignaciones',horario:'Horario',semana:'Semanas',festivo:'Festivos',configuracion:'Configuración',operacion:'Sistema',seguridad:'Seguridad',auth:'Seguridad'};
+    // Las seis que el servidor usa de verdad. `requerimiento`, `semana`,
+    // `festivo`, `operacion` y `auth` no las escribe nadie: se quedan por si
+    // quedara alguna fila vieja de una versión anterior.
+    const mapa={empleado:'Personal',solicitud:'Solicitudes',asignacion:'Asignaciones',
+        horario:'Horario',configuracion:'Configuración',seguridad:'Seguridad',sistema:'Sistema',
+        requerimiento:'Asignaciones',semana:'Semanas',festivo:'Festivos',operacion:'Sistema',auth:'Seguridad'};
     return mapa[String(entidad||'').toLowerCase()] || 'Aplicación';
 }
 function mesNombreNumero(m) {
@@ -1186,10 +1256,14 @@ function accionHistorialHtml(x) {
     if (['cancelar_solicitud','rechazar_solicitud'].includes(x.accion) && d.id) {
         return `<button type="button" class="danger-soft" onclick="eliminarSolicitudDesdeHistorial(${Number(d.id)})">Eliminar registro</button>`;
     }
-    if (x.accion==='cancelar_requerimiento' && d.id) {
+    // `cancelar_asignacion`, que es como lo escribe el servidor. Con el
+    // nombre de antes, el botón «Eliminar registro» de una asignación
+    // cancelada no aparecía nunca (el de solicitudes sí, porque ese
+    // nombre sí coincidía).
+    if (x.accion==='cancelar_asignacion' && d.id) {
         return `<button type="button" class="danger-soft" onclick="eliminarRequerimientoDesdeHistorial(${Number(d.id)})">Eliminar registro</button>`;
     }
-    if (x.accion==='cancelar_grupo_requerimientos' && d.grupo_id) {
+    if (x.accion==='cancelar_grupo_asignacion' && d.grupo_id) {
         return `<button type="button" class="danger-soft" onclick="eliminarGrupoDesdeHistorial('${esc(d.grupo_id)}')">Eliminar grupo</button>`;
     }
     return '—';

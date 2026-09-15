@@ -298,13 +298,24 @@ function elegirSolucionConflictos(pre) {
     return new Promise(resolve => {
         resolverSoluciones = resolve;
         $('soluciones-titulo').textContent = 'Conflicto detectado';
-        $('soluciones-resumen').textContent = `${pre.fechas_conflictivas?.length || 0} fecha(s) presentan conflicto. La app no elegirá por ti.`;
-        $('soluciones-lista').innerHTML = (pre.conflictos || []).map(c => `<div class="solution-item"><strong>${esc(c.mensaje)}</strong><div>${(c.fechas || []).map(fechaBonita).join(' · ')}</div><ul>${(c.soluciones || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`).join('');
+        // Los nombres son los que manda `/api/requerimientos/prevalidar`:
+        // `conflictos` (cada uno con **una** `fecha`, en singular) y
+        // `fechas_libres`. Con los de antes este cuadro era casi inútil: decía
+        // «0 fecha(s) presentan conflicto» encima de la lista de conflictos,
+        // cada conflicto salía sin su fecha, y el botón «Guardar fechas sin
+        // conflicto» estaba **siempre apagado**, así que la única salida que se
+        // ofrecía era resolverlo a mano.
+        const libres = pre.fechas_libres || [];
+        const conflictos = pre.conflictos || [];
+        $('soluciones-resumen').textContent = `${conflictos.length} fecha(s) presentan conflicto. La app no elegirá por ti.`;
+        $('soluciones-lista').innerHTML = conflictos.map(c => `<div class="solution-item"><strong>${esc(c.mensaje)}</strong><div>${c.fecha ? esc(fechaBonita(c.fecha)) : ''}</div></div>`).join('');
         $('solucion-manual').classList.remove('hidden');
         $('solucion-manual').textContent = 'Resolver manualmente';
-        $('solucion-omitir').textContent = 'Guardar fechas sin conflicto';
-        $('solucion-omitir').disabled = !(pre.fechas_disponibles || []).length;
-        $('solucion-omitir').onclick = () => cerrarSoluciones({accion:'omitir',fechas:pre.fechas_disponibles || []});
+        $('solucion-omitir').textContent = libres.length
+            ? `Guardar las ${libres.length} fecha(s) sin conflicto`
+            : 'Guardar fechas sin conflicto';
+        $('solucion-omitir').disabled = !libres.length;
+        $('solucion-omitir').onclick = () => cerrarSoluciones({accion:'omitir',fechas:libres});
         $('solucion-manual').onclick = () => cerrarSoluciones({accion:'manual'});
         $('modal-soluciones').classList.remove('hidden');
     });

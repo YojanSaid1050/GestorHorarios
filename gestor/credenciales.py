@@ -1,10 +1,28 @@
 # -*- coding: utf-8 -*-
 """El permiso de lectura con el que se bajan las versiones nuevas.
 
-El repositorio de este programa es **privado**: dentro están los nombres y los
-horarios de la oficina, y no tienen por qué estar a la vista de internet. Pero un
-repositorio privado no deja bajar nada a quien no se identifique, así que el
-instalador viaja con un permiso de solo lectura para ese repositorio y nada más.
+## Hoy no hace falta, y eso es lo primero que hay que saber
+
+El repositorio de este programa es **público**, así que las versiones nuevas se
+bajan sin identificarse y este archivo no se usa: `version.REPOSITORIO_PRIVADO`
+vale `False` y `gestor/servicios/actualizaciones.py` manda el permiso vacío.
+
+No es un detalle. Mandar un permiso a un repositorio público es **peor** que no
+mandar ninguno: si el permiso está caducado o es de otro sitio, GitHub contesta
+**401** a una dirección que cualquiera puede abrir sin nada. Y eso fue
+exactamente lo que pasó: durante un tiempo el código mandaba el permiso siempre,
+aunque el comentario de al lado dijera que solo con el repositorio privado, y la
+pantalla enseñaba «No se pudo comprobar si hay una versión nueva: 401».
+
+Lo que sigue vale el día que el repositorio vuelva a ser privado. Para eso está
+el interruptor de `version.py`.
+
+---
+
+Con el repositorio privado, dentro están los nombres y los horarios de la
+oficina, y no tienen por qué estar a la vista de internet. Pero un repositorio
+privado no deja bajar nada a quien no se identifique, así que el instalador
+viaja con un permiso de solo lectura para ese repositorio y nada más.
 
 ## Esto no es un secreto, y hay que decirlo claro
 

@@ -191,6 +191,7 @@ async function ejecutarCargaInicial(nombre, tarea) {
     for (const [nombre, tarea] of [
         ['apariencia de la aplicación', cargarTemaApp],
         ['claro u oscuro', cargarModoApp],
+        ['barra de la ventana', cargarBarraVentana],
         ['personal', cargarEmpleados],
         ['solicitudes', cargarSolicitudes],
         ['asignaciones y ajustes', cargarRequerimientos],
@@ -560,7 +561,10 @@ function avisarProblemasDeBase(problemas) {
 async function aplicarEdicion() {
     try {
         const salud = await fetch('/api/salud').then(r => r.json());
-        avisarProblemasDeBase(salud?.problemas_base);
+        // `problemas`, que es como se llama en `/api/salud`. Con el nombre de
+        // antes, `Array.isArray(undefined)` salía y el aviso de «Instalación
+        // incompleta» no se dio nunca, que es tanto como no tenerlo.
+        avisarProblemasDeBase(salud?.problemas);
         const e = salud?.edicion;
         if (!e) return;
         const nombre = `${e.nombre} ${e.version}`.trim();

@@ -10,8 +10,9 @@ abrir un navegador si las pruebas de Python ya han fallado:
 4. **reglas** — cada norma, comprobada desde su enunciado sobre cada opción de
    cada mes, con el número de casos revisados delante;
 5. **combinaciones** — lo que pasa entre piezas cuando algo cambia debajo;
-6. **pantalla**, **interfaz** y **visual** — la aplicación usada con un
-   navegador: los caminos, todos los botones y formularios, y que todo se lea.
+6. **pantalla**, **interfaz**, **ventana** y **visual** — la aplicación usada con
+   un navegador: los caminos, todos los botones y formularios, la barra de la
+   ventana conducida con el ratón, y que todo se lea.
 
 Se ejecutan **todas** aunque una falle. Pararse en la primera esconde las demás,
 y lo que hace falta al terminar una tanda de cambios es la lista completa de lo
@@ -34,6 +35,7 @@ TANDA = [
     ('cambios sobre meses ya hechos', [sys.executable, 'qa/combinaciones.py']),
     ('la aplicación usada con un navegador', [sys.executable, 'qa/pantalla.py']),
     ('todos los botones y formularios', [sys.executable, 'qa/interfaz.py']),
+    ('la barra propia de la ventana', [sys.executable, 'qa/ventana.py']),
     ('que todo se lea, en claro y en oscuro', [sys.executable, 'qa/visual.py']),
 ]
 

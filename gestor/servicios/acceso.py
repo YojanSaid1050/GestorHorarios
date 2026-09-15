@@ -62,6 +62,21 @@ SIN_SESION = (
     '/api/salud', '/api/auth/login', '/api/auth/cuentas-login', '/api/auth/session',
 )
 
+#: Direcciones que se pueden **leer** sin haber entrado, y solo leer.
+#:
+#: Son pura apariencia: con qué color y en claro o en oscuro se pinta la
+#: aplicación. No dicen nada de la oficina y hacen falta **antes** de entrar,
+#: porque la pantalla de acceso se pinta con ellas.
+#:
+#: Sin esto contestaban 401 y la pantalla de acceso se quedaba sin los colores
+#: del tema. En oscuro eso la dejaba con el fondo transparente y la aplicación
+#: entera se veía por debajo, borrosa pero legible, sin haber entrado nadie.
+#:
+#: Solo de lectura, y por eso van aparte: cambiarlos sigue pidiendo sesión.
+SIN_SESION_AL_LEER = (
+    '/api/configuracion/modo-app', '/api/configuracion/tema-app',
+)
+
 
 def _ahora() -> datetime:
     return datetime.now(timezone.utc)
@@ -260,6 +275,8 @@ async def comprobar_permiso(peticion: Request, siguiente):
     """Deja pasar, o contesta por qué no. Se aplica a todo lo que sea `/api/`."""
     camino = peticion.url.path
     if not camino.startswith('/api/') or camino in SIN_SESION:
+        return await siguiente(peticion)
+    if peticion.method == 'GET' and camino in SIN_SESION_AL_LEER:
         return await siguiente(peticion)
 
     usuario = sesion_de(peticion.headers.get('X-Session-Token'))

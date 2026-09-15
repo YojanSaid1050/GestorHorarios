@@ -1532,15 +1532,37 @@ td button.danger-button:hover {
     background: var(--bg)!important;
     color: var(--text)!important;
 }
+/* La pantalla de acceso tapa la aplicación entera, así que su fondo no puede
+   depender de nada que pueda no estar.
+
+   Aquí dependía: `var(--login-end)` sin respaldo. Esas dos variables las pone el
+   JavaScript al aplicar el tema, y el tema se pide a `/api/configuracion/...`,
+   que **antes de entrar contestaba 401**. Sin valor, toda la declaración
+   `background` queda inválida —y con `!important` gana igualmente a las demás—,
+   así que el fondo salía transparente: la aplicación se veía entera, borrosa,
+   por debajo del formulario de acceso, con los nombres de la oficina a la vista
+   de cualquiera que pasara por delante de la pantalla.
+
+   Solo pasaba en oscuro, que es por lo que tardó en verse: la regla de claro sí
+   traía respaldos. Van los dos arreglos: que el tema se pueda leer sin sesión, y
+   estos respaldos, porque un fallo de red no puede dejar el acceso transparente. */
 :root[data-modo="oscuro"] .login-overlay {
+    /* Primero un color sólido a secas. Si la línea de abajo no se pudiera
+       aplicar —una variable que falta, un navegador sin `color-mix`—, esta
+       sobrevive y el fondo sigue siendo opaco, que es lo único que no se
+       negocia. */
+    background: var(--login-start, var(--brand-deep, #2a1633))!important;
     background:
         radial-gradient(1100px 620px at 50% -10%,
-            color-mix(in srgb, var(--login-end) 48%, transparent), transparent 70%),
-        linear-gradient(150deg, var(--login-start), var(--login-end))!important;
+            color-mix(in srgb, var(--login-end, var(--brand, #5b2a86)) 48%, transparent),
+            transparent 70%),
+        linear-gradient(150deg,
+            var(--login-start, var(--brand-deep, #2a1633)),
+            var(--login-end, var(--brand, #5b2a86)))!important;
 }
 :root[data-modo="oscuro"] .login-card .form-alert {
-    background: color-mix(in srgb, var(--login-end) 26%, var(--surface))!important;
-    border-color: color-mix(in srgb, var(--login-end) 62%, #ffffff)!important;
+    background: color-mix(in srgb, var(--login-end, var(--brand, #5b2a86)) 26%, var(--surface))!important;
+    border-color: color-mix(in srgb, var(--login-end, var(--brand, #5b2a86)) 62%, #ffffff)!important;
     border-left-color: var(--theme-focus)!important;
     color: #ffffff!important;
 }

@@ -27,7 +27,7 @@ function renderHorario(r) {
         return `<tr>
             <td class="employee-name">${esc(e.nombre)}</td>
             <td>${area(e.area)}</td>
-            <td>${e.turno_base}</td>
+            <td>${esc(e.turno_base ?? '—')}</td>
             ${e.dias.map(d => `<td class="dia-turno shift-${d.turno}${d.es_ultimo_viernes_administrativo && ['ADM-GS','ADM-AC'].includes(d.turno) ? ' admin-friday-cell' : ''}${esOtroMes(d) ? ' otro-mes' : ''}${d.heredado ? ' heredado' : ''}${esLunes(d) ? ' semana-inicio' : ''}" title="${esc(comentarioDia(d))}">${d.turno === 'NV' ? '—' : d.turno}</td>`).join('')}
             <td class="stat-col stat-periodo">${st.horas_periodo ?? st.horas_mes ?? 0} h</td>
             <td class="stat-col">${st.horas_mes || 0} h</td>
@@ -240,7 +240,12 @@ async function oficializar(horarioId, confirmarCadena) {
         await cargarEmpleados();
         await cargarEstadoPeriodo();
         await cargarResumenPublicacion();
-        const deshechos = data.periodos_deshechos || [];
+        // `meses_que_dependian`, que es como lo manda el servidor
+        // (`gestor/servicios/generacion.py`). Con el nombre de antes la lista
+        // salía siempre vacía y el aviso era **siempre verde**, aunque el
+        // cambio acabara de dejar dos meses posteriores apoyados en un
+        // horario oficial que ya no existe.
+        const deshechos = data.meses_que_dependian || [];
         toast(data.mensaje, deshechos.length ? 'warning' : 'success',
               deshechos.length ? 'Oficial actualizado · hay meses por rehacer' : 'Horario oficial actualizado');
     } catch (e) {

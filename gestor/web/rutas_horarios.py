@@ -63,7 +63,17 @@ class Parcial(BaseModel):
 
 
 def _resumen(propuesta: dict) -> dict:
-    """Lo que la pantalla necesita de cada propuesta para poder compararlas."""
+    """Lo que la pantalla necesita de cada propuesta para poder compararlas.
+
+    Esta lista **es un contrato**, y `pruebas/test_contrato.py` lo comprueba
+    campo a campo contra lo que el JavaScript lee de verdad.
+
+    Hace falta que lo compruebe alguien porque olvidarse de un campo aquí no
+    rompe nada: la pantalla lo lee con `|| 0` o `?? '—'` y enseña un cero o un
+    guion **con la misma pinta que un dato de verdad**. Así estuvo la columna de
+    horas del horario, marcando «0 h» y «0 de —» para toda la oficina, mes tras
+    mes, con las estadísticas bien calculadas y guardadas a un palmo de aquí.
+    """
     return {
         'horario_id': propuesta.get('horario_id') or propuesta.get('id'),
         'alternativa': propuesta.get('alternativa'),
@@ -75,6 +85,19 @@ def _resumen(propuesta: dict) -> dict:
         'horario': propuesta.get('horario') or [],
         'excepciones_manuales': propuesta.get('excepciones_manuales') or [],
         'reprogramacion_parcial': propuesta.get('reprogramacion_parcial'),
+        # Las cinco columnas de la derecha del horario: horas del período, horas
+        # del mes, domingos, festivos y especiales.
+        'estadisticas': propuesta.get('estadisticas') or [],
+        # Lo que Validación necesita para decir de qué tipo es cada aviso y qué
+        # hacer con él. Sin esto, cada tarjeta caía en «Regla general».
+        'validaciones': propuesta.get('validaciones') or [],
+        'resumen_validacion': propuesta.get('resumen_validacion') or {},
+        # El tope de jornadas seguidas y los domingos del mes rigen lo que se
+        # enseña, y son configurables: viajan con el horario para que la
+        # pantalla no los escriba a mano.
+        'reglas': propuesta.get('reglas') or {},
+        'nota_horas': propuesta.get('nota_horas'),
+        'cambios_aplicados': propuesta.get('cambios_aplicados') or [],
     }
 
 
@@ -143,12 +166,45 @@ def reprogramar_parcial(peticion: Parcial):
     return _reprogramar(edicion.Peticion(**peticion.model_dump()))
 
 
+def _turnos_por_dia(horario: list) -> dict:
+    """`(persona, fecha) -> turno`, para poder comparar dos horarios."""
+    return {(f.get('empleado_id'), d.get('fecha')): d.get('turno')
+            for f in (horario or []) for d in (f.get('dias') or [])}
+
+
+def _no_tocó_a_los_demás(areas, base: dict, propuesta: dict) -> bool:
+    """¿La propuesta dejó intactas las áreas que no se pidió rehacer?
+
+    La pantalla decía «Las otras dos áreas se conservaron sin cambios» y **nadie
+    lo había comprobado**: leía un campo, `independencia_verificada`, que no
+    existía en ninguna parte del programa, así que `undefined !== false` salía
+    cierto y el mensaje se daba por bueno siempre. Es el peor sentido posible
+    para un valor que falta: afirmar en positivo.
+
+    Se compara turno a turno, que es lo que de verdad significa «sin cambios».
+    """
+    if not areas:
+        return True
+    otras = {(f.get('empleado_id'))
+             for f in (base.get('horario') or [])
+             if f.get('area') not in set(areas)}
+    antes = _turnos_por_dia(base.get('horario'))
+    despues = _turnos_por_dia(propuesta.get('horario'))
+    llaves = {k for k in (set(antes) | set(despues)) if k[0] in otras}
+    return all(antes.get(k) == despues.get(k) for k in llaves)
+
+
 def _reprogramar(peticion: edicion.Peticion, etiqueta: str = '') -> dict:
     try:
         resultado = edicion.reprogramar(peticion)
     except edicion.NoSePudoReprogramar as aviso:
         raise _aviso(str(aviso)) from None
-    alternativas = [_resumen(a) for a in resultado['alternativas']]
+    partida = (horarios.obtener(int(peticion.horario_id)) if peticion.horario_id
+               else horarios.oficial(peticion.anio, peticion.mes)) or {}
+    alternativas = [
+        {**_resumen(a),
+         'independencia_verificada': _no_tocó_a_los_demás(peticion.areas, partida, a)}
+        for a in resultado['alternativas']]
     historial.anotar('reprogramacion_parcial', 'horario', {
         'periodo': f'{peticion.anio}-{int(peticion.mes):02d}',
         'areas': peticion.areas, 'empleado_id': peticion.empleado_id,
@@ -192,14 +248,39 @@ def ver_cambios_manuales(anio: int, mes: int):
 
 @router.get('/opciones/{anio}/{mes}')
 def opciones(anio: int, mes: int):
+    """Las propuestas guardadas del mes, y cuál es la que rige.
+
+    La pantalla repinta **siempre** desde aquí, incluso justo después de
+    generar, así que lo que falte en esta respuesta no se ve en ninguna parte
+    de la aplicación aunque la generación lo haya devuelto un segundo antes.
+
+    Por eso el horario que rige viaja aparte de la lista de alternativas: la
+    pantalla solo enseña las cinco primeras, y en un mes con seis propuestas la
+    oficial podía quedarse fuera. Entonces la tarjeta «Horario actual» y el
+    botón de Modificar que lo carga desaparecían, sin decir por qué.
+    """
     guardadas = horarios.propuestas(anio, mes)
     oficial_guardado = next((p for p in guardadas if p['oficial']), None)
+    publicado_guardado = next((p for p in guardadas if p['publicado']), None)
+    en_pantalla = guardadas[:5]
     return {
         'ok': True,
         'cantidad': len(guardadas),
         'alternativas': [_resumen({**p, 'horario_id': p['id']}) for p in guardadas],
         'oficial_id': oficial_guardado['id'] if oficial_guardado else None,
         'publicado': bool(oficial_guardado and oficial_guardado['publicado']),
+        'publicado_id': publicado_guardado['id'] if publicado_guardado else None,
+        'grupo_id': guardadas[0]['grupo_id'] if guardadas else None,
+        'horario_actual': (_resumen({**oficial_guardado,
+                                     'horario_id': oficial_guardado['id']})
+                           if oficial_guardado else None),
+        'horario_publicado': (_resumen({**publicado_guardado,
+                                        'horario_id': publicado_guardado['id']})
+                              if publicado_guardado else None),
+        # ¿Hay algo que comparar, o lo único guardado es lo que ya rige? De eso
+        # depende que la pantalla invite a comparar o se limite a enseñar el mes.
+        'hay_opciones_pendientes': any(
+            not p['oficial'] and not p['publicado'] for p in en_pantalla),
     }
 
 

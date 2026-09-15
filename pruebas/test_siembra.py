@@ -128,3 +128,39 @@ def test_sembrar_dos_veces_no_duplica_nada(sembrada):
     antes = len(horarios.propuestas(2026, 9))
     siembra.sembrar()
     assert len(horarios.propuestas(2026, 9)) == antes
+
+
+def test_se_rellena_el_turno_base_de_lo_que_ya_estaba_guardado(base):
+    """Una instalación que ya existe también tiene que quedar arreglada.
+
+    Los meses transcritos se guardaron con `turno_base` en `None` para quien
+    rota y para quien es administrativo, y la columna «Base» del horario enseñó
+    la palabra «null» en la oficina. Arreglar el origen no basta: esos dos meses
+    no se vuelven a sembrar nunca, porque la siembra ve que ya están.
+    """
+    import json
+
+    from gestor.datos import horarios
+    from gestor.datos.base import transaccion
+    from gestor.servicios import siembra
+
+    siembra.sembrar()
+    guardados = horarios.propuestas(2026, 9) or horarios.propuestas(2026, 8)
+    assert guardados, 'no se sembró ningún mes base'
+    identificador = guardados[0]['id']
+
+    # Se deja como estaba en la instalación entregada.
+    with transaccion() as conexion:
+        fila = conexion.execute('SELECT datos_json FROM horarios WHERE id=?',
+                                (identificador,)).fetchone()
+        datos = json.loads(fila['datos_json'])
+        for persona in datos['horario']:
+            persona['turno_base'] = None
+        conexion.execute('UPDATE horarios SET datos_json=? WHERE id=?',
+                         (json.dumps(datos, ensure_ascii=False), identificador))
+
+    assert siembra.reparar_turnos_base_guardados() >= 1
+
+    quedaron = [p['nombre'] for p in horarios.obtener(identificador)['horario']
+                if not p.get('turno_base')]
+    assert not quedaron, f'seguirían saliendo con «null»: {quedaron}'

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import sqlite3
 import tempfile
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, File, Request, UploadFile
@@ -24,6 +24,7 @@ from gestor.dominio import calendario
 from gestor.dominio.catalogo import catalogo
 from gestor.dominio.cobertura import AREAS
 from gestor.servicios import acceso, historial, periodos, publicacion
+from gestor.version import VERSION
 
 router = APIRouter(prefix='/api/operacion', tags=['operacion'])
 
@@ -245,8 +246,21 @@ def copia_de_seguridad(peticion: Request):
         finally:
             copia.close()
     historial.anotar('crear_copia', 'sistema', {'archivo': str(destino)})
-    return {'ok': True, 'archivo': str(destino), 'mensaje': (
-        f'Copia guardada en {destino}.')}
+    # El nombre, el tamaño y la hora se devuelven porque la pantalla los enseña
+    # debajo del botón. Sin ellos ponía «Última copia: undefined ·  · V · 0 KB»
+    # justo después de hacer una copia que había salido bien, que es la peor
+    # forma de dar una buena noticia.
+    return {
+        'ok': True,
+        'archivo': str(destino),
+        'nombre': destino.name,
+        'creado_en': datetime.fromtimestamp(
+            destino.stat().st_mtime, tz=timezone.utc).astimezone().isoformat(
+                timespec='seconds'),
+        'tamano_bytes': destino.stat().st_size,
+        'version': VERSION,
+        'mensaje': f'Copia guardada en {destino}.',
+    }
 
 
 #: Las tablas sin las cuales el archivo que llega no es una copia de este

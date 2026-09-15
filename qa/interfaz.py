@@ -183,6 +183,7 @@ def censo(app, acta) -> dict:
         for control in app.pag.evaluate(CENSO_JS):
             control['pestana'] = pestana
             todos.setdefault(control['clave'], control)
+        sin_basura_en_la_pantalla(app, acta, pestana)
     # Lo que se comprueba es que **ninguna pestaña se quedó sin abrir**, no que
     # todas aporten botones: «Validación» no tiene ni uno, porque es una pantalla
     # de lectura, y contar controles la habría denunciado siempre.
@@ -216,6 +217,59 @@ def sigue_viva(app) -> bool:
     app.ir('personal')
     return bool(en_horario) and bool(app.pag.evaluate(
         "()=>document.getElementById('personal')?.classList.contains('active')"))
+
+
+#: Palabras que nunca tiene que leer una persona en la pantalla. Todas son la
+#: misma cosa: un dato que no llegó y que se pintó tal cual en vez de fallar.
+BASURA_EN_PANTALLA = ('undefined', 'null', 'NaN', '[object Object]')
+
+MIRAR_SI_HAY_BASURA = r"""
+(palabras) => {
+  const malo = [];
+  const visible = el => {
+    const c = getComputedStyle(el);
+    return c.display !== 'none' && c.visibility !== 'hidden';
+  };
+  const andador = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let n = andador.nextNode(); n; n = andador.nextNode()) {
+    const texto = (n.textContent || '').trim();
+    if (!texto) continue;
+    const padre = n.parentElement;
+    if (!padre || padre.closest('script, style') || !visible(padre)) continue;
+    for (const palabra of palabras) {
+      // Con límites de palabra: «anulado» lleva «null» dentro y no es basura.
+      const suelta = palabra.replace(/[[\]]/g, '\\$&');
+      const limite = '[^A-Za-zÀ-ÿ0-9_]';
+      if (new RegExp(`(^|${limite})${suelta}($|${limite})`, 'i').test(texto)) {
+        malo.push({palabra, texto: texto.slice(0, 90),
+                   donde: padre.tagName.toLowerCase() + (padre.id ? '#' + padre.id : '')});
+      }
+    }
+  }
+  return malo;
+}
+"""
+
+
+def sin_basura_en_la_pantalla(app, acta, pestana: str) -> None:
+    """Que no se lea «null» ni «undefined» en ninguna parte.
+
+    Es la mitad automática de la lección que costó cuarenta agujeros: la pantalla
+    lee lo que manda el servidor con `|| 0` y `?? '—'`, así que un campo que falta
+    no rompe nada. Cuando **no** hay red de esas, lo que falta se pinta tal cual:
+    la columna «Base» del horario enseñó la palabra «null» a la oficina, y la
+    línea de la copia de seguridad decía «Última copia: undefined».
+
+    Lo que se lee en la pantalla se puede mirar sin saber de dónde viene, y eso
+    es justo lo que hace esto. La otra mitad —los ceros de mentira, que no se
+    distinguen mirando— la comprueba `pruebas/test_contrato.py`.
+    """
+    encontrado = app.pag.evaluate(MIRAR_SI_HAY_BASURA, list(BASURA_EN_PANTALLA))
+    acta.comprobar(
+        not encontrado,
+        f'en «{pestana}» no se lee ningún «null» ni «undefined»',
+        ' | '.join(f'{x["palabra"]} en {x["donde"]}: «{x["texto"]}»'
+                   for x in encontrado[:4]))
 
 
 def barrido(app, acta, controles: dict) -> set:

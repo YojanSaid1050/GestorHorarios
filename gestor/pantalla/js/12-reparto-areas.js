@@ -39,7 +39,12 @@ function frasePlanaDelArea(v, area) {
     } else {
         partes.push('no hay un mínimo obligatorio de personas');
     }
-    if (v.am_objetivo !== null && v.am_objetivo !== undefined) {
+    // Los dos, no solo AM. Son dos columnas que se guardan por separado y el
+    // formulario deja rellenar una y dejar la otra en blanco —la etiqueta
+    // invita a ello: «Vacío = la aplicación reparte sola»—, así que mirando
+    // solo AM la frase salía diciendo «2 de mañana y null de tarde».
+    if (v.am_objetivo !== null && v.am_objetivo !== undefined
+        && v.pm_objetivo !== null && v.pm_objetivo !== undefined) {
         partes.push(`el reparto habitual es ${v.am_objetivo} de mañana y ${v.pm_objetivo} de tarde`);
     }
     const techos = [];
@@ -149,7 +154,9 @@ function tarjetaReglaCobertura(area) {
 
 function textoReparto(regla) {
     if (!regla) return 'Sin configurar';
-    const objetivo = (regla.am_objetivo === null || regla.am_objetivo === undefined)
+    // Igual que arriba: hacen falta los dos para poder decir el reparto.
+    const objetivo = (regla.am_objetivo === null || regla.am_objetivo === undefined
+                      || regla.pm_objetivo === null || regla.pm_objetivo === undefined)
         ? 'reparto automático'
         : `${regla.am_objetivo} AM + ${regla.pm_objetivo} PM`;
     // El texto del mínimo lo calcula el servidor, que es quien conoce la regla.

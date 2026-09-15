@@ -176,6 +176,26 @@ def _codigo_administrativo_area(area: str) -> Optional[str]:
         'comunicaciones': 'ADM-GS',
     }.get(area)
 
+def turno_base_de(empleado: dict) -> Optional[str]:
+    """Lo que se enseña en la columna «Base» del horario.
+
+    Estaba escrito dos veces y las dos no decían lo mismo. El motor ponía
+    `AM/PM` a quien rota y el código de su área a quien es administrativo; la
+    siembra de los meses transcritos copiaba `turno_fijo` a secas, que para esas
+    dos clases de persona vale `None`. Resultado: en agosto y septiembre de 2026
+    —los dos meses que la oficina tiene de verdad— la columna «Base» enseñaba la
+    palabra **«null»** en siete filas.
+
+    Una regla, un sitio. Quien la cambie la cambia para los dos.
+    """
+    tipo = empleado.get('tipo_turno')
+    if tipo == 'administrativo':
+        return _codigo_administrativo_area(empleado.get('area'))
+    if tipo == 'rotativo':
+        return 'AM/PM'
+    return empleado.get('turno_fijo')
+
+
 def _codigo_guia_area(area: str) -> Optional[str]:
     """Código administrativo temporal/operativo correspondiente al área."""
     return {

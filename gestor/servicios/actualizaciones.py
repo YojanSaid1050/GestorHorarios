@@ -109,13 +109,23 @@ class Actualizaciones:
             registro.info('Velopack no está disponible aquí: %s', exc)
             return None
         try:
-            # El segundo argumento es el permiso de lectura. Va vacío mientras el
-            # repositorio sea público y con el permiso puesto cuando es privado,
-            # que es como está hoy: sin él, GitHub contesta que ese repositorio
-            # no existe —no que no se tiene permiso—, y el programa se quedaría
-            # diciendo para siempre que ya tiene la última versión.
+            # El segundo argumento es el permiso de lectura, y **solo se manda
+            # con el repositorio privado**.
+            #
+            # Decía hacer esto y no lo hacía: mandaba el permiso siempre. Con el
+            # repositorio ya público, un permiso viejo o caducado dentro del
+            # programa instalado hace que GitHub conteste **401** a una
+            # dirección que cualquiera puede abrir sin identificarse. Es lo que
+            # salía en pantalla: «No se pudo comprobar si hay una versión nueva:
+            # http status: 401».
+            #
+            # Con el repositorio privado sí hace falta: sin permiso, GitHub
+            # contesta que ese repositorio no existe —no que no se tiene
+            # permiso—, y el programa se quedaría diciendo para siempre que ya
+            # tiene la última versión.
+            token = self._permiso.token if REPOSITORIO_PRIVADO else ''
             fuente = GithubSource(f'https://github.com/{self.repositorio}',
-                                  self._permiso.token, False)
+                                  token, False)
             self._gestor = UpdateManager(fuente)
         except Exception as exc:                                  # noqa: BLE001
             registro.info('esta copia no está instalada con Velopack: %s', exc)

@@ -29,7 +29,7 @@ const GRUPOS_CONFIG = [
         id: 'apariencia',
         nombre: 'Apariencia',
         ayuda: 'Cómo se ve la aplicación y con qué colores sale el Excel.',
-        tarjetas: ['cfg-modo', 'cfg-apariencia', 'cfg-colores'],
+        tarjetas: ['cfg-ventana', 'cfg-modo', 'cfg-apariencia', 'cfg-colores'],
     },
     {
         id: 'cuenta',
@@ -265,7 +265,13 @@ function actualizarContadoresMenu() {
     // Solicitudes pendientes de aprobar en este mes.
     ponerContadorMenu('solicitudes',
         (typeof solicitudes !== 'undefined' && Array.isArray(solicitudes))
-            ? solicitudes.filter(x => !x.aprobada && !x.rechazada && solicitudDelPeriodo(x)).length : 0);
+            // `estado_efectivo`, que es lo que el servidor calcula y lo único
+            // que distingue «pendiente» de «vencida», «rechazada» o
+            // «cancelada». El campo `rechazada` que se leía aquí no existe en
+            // ninguna parte del programa, así que el número rojo contaba
+            // también las rechazadas y las canceladas: crecía y no bajaba
+            // nunca, y quien lo seguía llegaba a una tabla sin nada pendiente.
+            ? solicitudes.filter(x => x.estado_efectivo === 'pendiente' && solicitudDelPeriodo(x)).length : 0);
 
     // Solo asignaciones pendientes de incorporar. Contar todas las activas
     // mantenía un número aunque el horario ya estuviera actualizado y hacía

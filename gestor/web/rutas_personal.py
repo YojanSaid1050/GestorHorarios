@@ -23,6 +23,7 @@ from pydantic import BaseModel
 
 from gestor.datos import personal
 from gestor.dominio import calendario, cobertura
+from gestor.motor.comun import turno_base_de
 from gestor.servicios import cambios_de_turno, historial, periodos
 
 router = APIRouter(prefix='/api/empleados', tags=['personal'])
@@ -100,11 +101,43 @@ def _a_columnas(datos: dict) -> dict:
     return columnas
 
 
+#: Cómo se dice cada día de la semana en la columna «Descanso». El número es el
+#: que guarda `descanso_fijo`, con el lunes en 0, igual que Python.
+DIAS_DE_LA_SEMANA = ('lunes', 'martes', 'miércoles', 'jueves', 'viernes',
+                     'sábado', 'domingo')
+
+
+def _descanso_mostrado(persona: dict) -> str:
+    dia = persona.get('descanso_fijo')
+    if dia is None:
+        return 'Variable'
+    try:
+        return DIAS_DE_LA_SEMANA[int(dia)].capitalize()
+    except (TypeError, ValueError, IndexError):
+        return 'Variable'
+
+
 @router.get('')
 def listar(incluir_inactivos: bool = False):
+    """La plantilla, con las columnas ya escritas para leerlas.
+
+    `turno_base_mostrado` y `descanso_mostrado` se calculan aquí porque la tabla
+    de Personal los enseña tal cual. No existían: la pantalla los leía con
+    `|| ''` y `|| 'Variable'`, así que la columna **«Turno base» salía en blanco
+    para toda la oficina** y la de **«Descanso» decía «Variable» para todos**,
+    incluida la gente que tiene un día fijo configurado. Nada fallaba; solo
+    faltaba, y lo que faltaba se parecía a un dato.
+
+    El turno base sale de la misma regla que usa el horario
+    (`gestor.motor.comun.turno_base_de`), no de una copia escrita aquí: que la
+    tabla de Personal y la columna «Base» del horario digan cosas distintas de
+    la misma persona es exactamente el fallo que se acaba de arreglar.
+    """
     gente = personal.listar(incluir_retirados=incluir_inactivos)
     for persona in gente:
         persona['cobertura_texto'] = cobertura.describir(persona.get('cobertura_dias'))
+        persona['turno_base_mostrado'] = turno_base_de(persona) or '—'
+        persona['descanso_mostrado'] = _descanso_mostrado(persona)
     return gente
 
 

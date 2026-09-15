@@ -46,6 +46,14 @@ class SolicitudNueva(BaseModel):
     turno_solicitado: Optional[str] = None
     dia_descanso_solicitado: Optional[int] = None
     observacion: str = ''
+    #: La casilla «Aprobada por el jefe» del formulario.
+    #:
+    #: Hay que declararla o Pydantic la tira sin decir nada, que es lo que
+    #: pasaba: se marcaba la casilla, salía el aviso verde de guardado, y la
+    #: solicitud aparecía en la tabla como **pendiente**. Había que aprobarla
+    #: otra vez a mano, y quien no se fijaba se quedaba con una novedad sin
+    #: aprobar que el horario no tenía en cuenta.
+    aprobada: bool = False
 
 
 class AsignacionNueva(BaseModel):
@@ -157,11 +165,21 @@ def borrar_finalizadas():
 def crear_solicitud(solicitud: SolicitudNueva):
     datos = solicitud.model_dump()
     nombre = _nombre(datos['empleado_id'])
+    ya_aprobada = bool(datos.pop('aprobada', False))
+    datos['estado'] = 'aprobada' if ya_aprobada else 'pendiente'
     identificador = novedades.crear_solicitud(datos)
     historial.anotar('crear_solicitud', 'solicitud',
-                     {'id': identificador, 'nombre': nombre, 'tipo': datos['tipo']})
+                     {'id': identificador, 'nombre': nombre, 'tipo': datos['tipo'],
+                      'estado': datos['estado']})
+    if not ya_aprobada:
+        return {'ok': True, 'id': identificador,
+                'mensaje': f'Solicitud de {nombre} registrada, pendiente de aprobar.'}
+    # Una novedad que nace aprobada cambia el horario igual que una que se
+    # aprueba después, así que el período queda marcado igual.
+    aviso = _avisar_de_la_solicitud(
+        {**datos, 'id': identificador}, 'se registró una novedad ya aprobada')
     return {'ok': True, 'id': identificador,
-            'mensaje': f'Solicitud de {nombre} registrada, pendiente de aprobar.'}
+            'mensaje': f'Solicitud de {nombre} registrada y aprobada.' + aviso}
 
 
 @router.put('/solicitudes/{solicitud_id}')

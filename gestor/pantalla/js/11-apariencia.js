@@ -377,11 +377,19 @@ async function aplicarPaleta(id, boton) {
 async function cargarRutasAplicacion() {
     try {
         const r = await api('/api/configuracion/rutas');
+        // Los nombres son los que manda el servidor (`gestor/rutas.py`).
+        // Antes se pedían `instalacion`, `base_datos` y `exportaciones_seguras`,
+        // que no existen: tres de las cuatro cajas salían **vacías**, y son
+        // justo las que mira quien necesita copiar la base a mano.
         $('rutas-aplicacion').innerHTML = [
-            ['Carpeta de instalación', r.instalacion],
+            ['Carpeta de instalación', r.programa],
             ['Datos persistentes', r.datos],
-            ['Base de datos · personal, solicitudes y horarios oficiales', r.base_datos],
-            ['Exportaciones de respaldo', r.exportaciones_seguras],
+            ['Base de datos · personal, solicitudes y horarios oficiales', r.base_de_datos],
+            ['Exportaciones a Excel', r.exportaciones],
+            ['Copias de seguridad', r.copias],
+            // Es la primera ruta que hace falta cuando algo va mal, y hasta
+            // ahora había que ir a buscarla al manual.
+            ['Registro de lo que falla', r.registro],
         ].map(([titulo, ruta]) => `<div class="path-item"><strong>${esc(titulo)}</strong><code>${esc(ruta)}</code></div>`).join('');
     } catch (e) {
         $('rutas-aplicacion').textContent = 'No se pudieron consultar las rutas: ' + e.message;
@@ -426,7 +434,11 @@ window.guardarFestivo = async fechaOriginal => {
             body: JSON.stringify({fecha_original: fechaOriginal, fecha_nueva: nueva}),
         });
         await cargarFestivosConfiguracion();
-        toast(`${data.festivo.nombre}: ${fechaBonita(fechaOriginal)} → ${fechaBonita(nueva)}. Regenera los meses afectados.`, 'success', 'Festivo actualizado');
+        // El texto lo escribe el servidor. Antes se leía `data.festivo.nombre`,
+        // que no existe: el festivo se movía, la tabla se refrescaba con la
+        // fecha nueva y acto seguido saltaba un aviso **rojo** diciendo que no
+        // se había podido cambiar.
+        toast(`${data.mensaje} Regenera los meses afectados.`, 'success', 'Festivo actualizado');
     } catch (e) {
         toast(e.message, 'error', 'No se pudo cambiar el festivo');
     }
@@ -821,7 +833,13 @@ if ($('comprobar-actualizacion')) {
             const datos = await api('/api/actualizaciones/descargar', {
                 method: 'POST', headers: {'X-Admin-Password': claveAdmin},
             });
-            novedadDescargada = datos.ruta;
+            // El servidor no devuelve ninguna ruta, y tampoco la necesita: el
+            // gestor de actualizaciones recuerda él solo lo que acaba de bajar.
+            // Guardando aquí `datos.ruta` —que no existe— esto quedaba en
+            // `undefined`, así que el botón «Instalar» aparecía, se podía
+            // pulsar y **no hacía absolutamente nada**: salía por el `if` de
+            // la primera línea de su manejador, sin un solo mensaje.
+            novedadDescargada = datos.version || true;
             $('instalar-actualizacion').classList.remove('hidden');
             setEstado('Versión descargada', 'success', 2000);
             toast(datos.mensaje, 'success', `Versión ${datos.version} descargada`);
@@ -849,8 +867,10 @@ if ($('comprobar-actualizacion')) {
         const claveAdmin = await pedirClaveAdmin('Instalar la versión nueva');
         if (!claveAdmin) return;
         try {
-            const datos = await api(
-                `/api/actualizaciones/instalar?ruta=${encodeURIComponent(novedadDescargada)}`,
+            // Sin `?ruta=`: esa ruta no se manda porque el servidor no la lee
+            // (ver `/api/actualizaciones/instalar`). Instalar es aplicar lo que
+            // ya se bajó, y de eso se acuerda el servidor.
+            const datos = await api('/api/actualizaciones/instalar',
                 {method: 'POST', headers: {'X-Admin-Password': claveAdmin}});
             toast(datos.mensaje, datos.ok ? 'success' : 'warning', 'Instalando');
             setEstado(datos.mensaje, datos.ok ? 'success' : 'warning');

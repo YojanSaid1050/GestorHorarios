@@ -21,8 +21,23 @@ from gestor.datos.base import abierta, transaccion
 
 
 def _como_dict(fila) -> dict:
+    """La propuesta guardada, entera.
+
+    **Entera** es la palabra, y costó caro no serlo. Aquí se subían a mano dos
+    campos de los catorce que produce el motor —el horario y los errores— y el
+    resto se quedaba enterrado dentro de `datos`. Nadie se enteró: la pantalla
+    lee `estadisticas` con `|| 0` y `advertencias` con `|| []`, así que en vez
+    de fallar enseñaba **ceros y listas vacías como si fueran el dato**. La
+    columna de horas del horario decía «0 h» para todo el mundo, y Validación
+    decía «Sin fallos ni advertencias» en meses que tenían nueve.
+
+    Por eso ahora se vuelca todo lo que el motor guardó y encima se ponen las
+    columnas de la base, que son las que pueden haber cambiado **después** de
+    guardarlo: oficializar, publicar o renumerar no reescriben el JSON.
+    """
     datos = json.loads(fila['datos_json'])
     return {
+        **datos,
         'id': int(fila['id']),
         'anio': int(fila['anio']),
         'mes': int(fila['mes']),

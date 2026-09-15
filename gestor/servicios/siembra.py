@@ -26,6 +26,7 @@ from pathlib import Path
 from gestor import rutas
 from gestor.datos.base import abierta, transaccion
 from gestor.dominio import calendario
+from gestor.motor.comun import turno_base_de
 from gestor.registro import obtener
 from gestor.servicios import reglas_cobertura, reglas_operacion
 
@@ -165,7 +166,7 @@ def _cargar_base(nombre: str) -> bool:
             'nombre': ficha['nombre'],
             'area': ficha['area'],
             'tipo_turno': ficha['tipo_turno'],
-            'turno_base': ficha.get('turno_fijo'),
+            'turno_base': turno_base_de(ficha),
             'cobertura_dias': ficha.get('cobertura_dias'),
             # La pareja viaja con la fila: la revisión de publicación mira si
             # dos personas emparejadas coinciden de turno, y sin este dato no
@@ -199,6 +200,59 @@ def _cargar_base(nombre: str) -> bool:
     return True
 
 
+def reparar_turnos_base_guardados() -> int:
+    """Rellenar el turno base de los horarios que se guardaron sin él.
+
+    Los meses transcritos se guardaron copiando `turno_fijo` a secas, que para
+    quien rota y para quien es administrativo vale `None`. La columna «Base» del
+    horario enseñaba entonces la palabra **«null»**, y así salió en la oficina.
+
+    El origen ya está arreglado (`turno_base_de`, una sola regla para el motor y
+    para la siembra), pero eso solo vale para una instalación nueva: lo que ya
+    está guardado sigue con su `None` dentro, y esos dos meses no se vuelven a
+    sembrar nunca porque la siembra ve que ya están.
+
+    Así que se repara al abrir. Solo rellena lo que falta: no toca ningún turno,
+    ninguna fecha y ninguna estadística. Devuelve cuántos horarios se tocaron,
+    que en un arranque normal es cero.
+    """
+    from gestor.datos import personal
+
+    plantilla = {p['id']: p for p in personal.listar(incluir_retirados=True)}
+    if not plantilla:
+        return 0
+    arreglados = 0
+    with transaccion() as conexion:
+        filas = conexion.execute('SELECT id, datos_json FROM horarios').fetchall()
+        for fila in filas:
+            try:
+                datos = json.loads(fila['datos_json'])
+            except ValueError:
+                obtener().warning('el horario %s tiene un JSON ilegible', fila['id'])
+                continue
+            tocado = False
+            for persona in datos.get('horario') or []:
+                if persona.get('turno_base'):
+                    continue
+                ficha = plantilla.get(persona.get('empleado_id'))
+                if ficha is None:
+                    continue
+                nuevo = turno_base_de({**ficha, **{
+                    k: persona[k] for k in ('tipo_turno',) if persona.get(k)}})
+                if nuevo:
+                    persona['turno_base'] = nuevo
+                    tocado = True
+            if tocado:
+                conexion.execute(
+                    'UPDATE horarios SET datos_json=? WHERE id=?',
+                    (json.dumps(datos, ensure_ascii=False, default=str), fila['id']))
+                arreglados += 1
+    if arreglados:
+        obtener().info('se rellenó el turno base de %s horario(s) guardados',
+                       arreglados)
+    return arreglados
+
+
 def sembrar(completa: bool = True) -> Resultado:
     """Deja la instalación lista. Se puede llamar en cada arranque."""
     faltan = tuple(_archivos_que_faltan())
@@ -211,6 +265,14 @@ def sembrar(completa: bool = True) -> Resultado:
 
     personas = sembrar_personal() if completa else 0
     bases = tuple(n for n in BASES if _cargar_base(n)) if completa else ()
+    if completa:
+        # Después de la siembra, porque necesita la plantilla puesta.
+        try:
+            reparar_turnos_base_guardados()
+        except Exception:                                          # noqa: BLE001
+            # Una reparación que falla no puede impedir abrir: lo peor que pasa
+            # sin ella es que una columna siga diciendo «null».
+            obtener().exception('no se pudo rellenar el turno base guardado')
     return Resultado(personas=personas, bases=bases, faltan=faltan)
 
 

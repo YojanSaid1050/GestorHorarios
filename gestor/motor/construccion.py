@@ -22,6 +22,7 @@ from gestor.motor.comun import (  # noqa: F401
     _codigo_administrativo_area,
     _codigo_guia_area,
     _es_ultimo_viernes_administrativo,
+    turno_base_de,
 )
 from gestor.motor.vocabulario import (  # noqa: F401
     OUT_OF_VIGENCY_CODE,
@@ -67,7 +68,6 @@ def construir_base(empleados: list[dict], mes: int, anio: int) -> list[dict]:
     out = []
     for e in empleados:
         transiciones = sorted(fechas_de_transicion(e))
-        codigo_administrativo = _codigo_administrativo_area(e.get('area'))
         vigente_desde = str(e.get('vigente_desde') or '2026-08-01')[:10]
         vigente_hasta = str(e.get('desactivado_en') or '')[:10] if not bool(e.get('activo', 1)) else ''
         dias=[]
@@ -124,7 +124,7 @@ def construir_base(empleados: list[dict], mes: int, anio: int) -> list[dict]:
         out.append({
             'empleado_id':e['id'], 'nombre':e['nombre'], 'cargo':e.get('cargo','GUÍA SOCIAL'),
             'area':e['area'], 'tipo_turno':e['tipo_turno'],
-            'turno_base':(codigo_administrativo if e['tipo_turno']=='administrativo' else ('AM/PM' if e['tipo_turno']=='rotativo' else e.get('turno_fijo'))),
+            'turno_base':turno_base_de(e),
             'descanso_fijo':e.get('descanso_fijo'), 'pareja_id':e.get('pareja_id'),
             'inicio_rotacion':e.get('inicio_rotacion'), 'fecha_ancla_rotacion':e.get('fecha_ancla_rotacion'),
             'orden_rotacion':e.get('orden_rotacion',0), 'exento_especiales':bool(e.get('exento_especiales',0)),
