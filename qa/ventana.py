@@ -336,24 +336,26 @@ def el_interruptor(app: App, acta: Acta, servidor, cabeceras) -> None:
     acta.comprobar(not tapado,
                    'y el título de la tarjeta no queda tapado por la barra')
 
+    # De fábrica va la de Windows: la propia se entrega apagada porque es lo
+    # único que no se puede comprobar sin un escritorio delante.
     marcados = pag.evaluate(
         """() => [...document.querySelectorAll('[data-barra-opcion]')]
                  .filter(b => b.classList.contains('active'))
                  .map(b => b.dataset.barraOpcion)""")
-    acta.comprobar(marcados == ['propia'],
-                   'y enseña marcada la barra que está puesta', str(marcados))
+    acta.comprobar(marcados == ['windows'],
+                   'de fábrica enseña marcada la barra de Windows', str(marcados))
 
-    pag.evaluate("() => document.querySelector('[data-barra-opcion=\"windows\"]').click()")
+    pag.evaluate("() => document.querySelector('[data-barra-opcion=\"propia\"]').click()")
     pag.wait_for_timeout(900)
     estado, datos = servidor.pedir('/api/configuracion/barra-ventana', 'GET', None, cabeceras)
-    acta.comprobar(estado == 200 and datos.get('propia') is False,
-                   'elegir la de Windows queda guardado en la base',
+    acta.comprobar(estado == 200 and datos.get('propia') is True,
+                   'encender la del programa queda guardado en la base',
                    f'{estado} {datos}')
     marcados = pag.evaluate(
         """() => [...document.querySelectorAll('[data-barra-opcion]')]
                  .filter(b => b.classList.contains('active'))
                  .map(b => b.dataset.barraOpcion)""")
-    acta.comprobar(marcados == ['windows'], 'y la pantalla lo refleja', str(marcados))
+    acta.comprobar(marcados == ['propia'], 'y la pantalla lo refleja', str(marcados))
 
     nota = pag.text_content('#barra-ventana-nota') or ''
     acta.comprobar('abr' in nota.lower(),
@@ -364,11 +366,12 @@ def el_interruptor(app: App, acta: Acta, servidor, cabeceras) -> None:
     acta.comprobar(_visible(pag, '#barra-ventana'),
                    'y la barra de esta ventana sigue ahí: se decide al abrir')
 
-    pag.evaluate("() => document.querySelector('[data-barra-opcion=\"propia\"]').click()")
+    pag.evaluate("() => document.querySelector('[data-barra-opcion=\"windows\"]').click()")
     pag.wait_for_timeout(900)
     estado, datos = servidor.pedir('/api/configuracion/barra-ventana', 'GET', None, cabeceras)
-    acta.comprobar(estado == 200 and datos.get('propia') is True,
-                   'y se puede volver a la del programa', f'{estado} {datos}')
+    acta.comprobar(estado == 200 and datos.get('propia') is False,
+                   'y se puede volver a la de Windows, que es la salida de emergencia',
+                   f'{estado} {datos}')
 
 
 def main() -> int:
