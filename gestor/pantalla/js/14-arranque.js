@@ -150,16 +150,61 @@ async function ejecutarCargaInicial(nombre, tarea) {
     }
 }
 
+// Nada de lo que pasa antes de entrar puede dejar la pantalla muerta.
+//
+// El arranque hacía `await cargarModoApp()` a pelo. Esa función no lanza —tiene
+// su propio `catch`— pero si el servidor no contesta, el `await` no vuelve
+// nunca: `fetch` no tiene tope de espera. Y entonces lo que viene después
+// tampoco se ejecuta, incluido cargar las cuentas. Lo que se ve es la pantalla
+// de acceso pintada, el desplegable diciendo «Cargando cuentas…» para siempre y
+// ni un mensaje. Desde fuera parece que el programa se colgó.
+//
+// El modo, el tema y la lista de cuentas son comodidades. Entrar no lo es.
+function conTopeDeEspera(tarea, segundos) {
+    return Promise.race([
+        tarea(),
+        new Promise((_, fallar) => setTimeout(
+            () => fallar(new Error(`no contestó en ${segundos} segundos`)),
+            segundos * 1000)),
+    ]);
+}
+
+async function antesDeEntrar(nombre, tarea, segundos = 8) {
+    try {
+        await conTopeDeEspera(tarea, segundos);
+        return true;
+    } catch (error) {
+        console.error(`No se pudo cargar ${nombre} antes de entrar:`, error);
+        return false;
+    }
+}
+
+//: Si la lista de cuentas no llegó, se ponen las de siempre y se dice por qué.
+//: Es preferible a un desplegable vacío que no deja ni intentarlo.
+function cuentasDeRespaldo(motivo) {
+    const select = $('login-usuario');
+    if (select && (!select.options.length || !select.options[0].value)) {
+        select.innerHTML = '<option value="katerine">Katerine Manzanares</option>'
+                         + '<option value="admin">Administrador</option>';
+    }
+    avisoAcceso('El programa tardó en responder',
+                `${motivo} Puedes intentar entrar igualmente; si falla, cierra y `
+                + 'vuelve a abrir.');
+}
+
 (async function init() {
     tabs();
     // El modo y el tema se cargan antes del login para que la pantalla de
     // acceso conserve la apariencia elegida en la sesión anterior y no se vea
-    // un destello en claro antes de ponerse oscura.
+    // un destello en claro antes de ponerse oscura. Con tope: si el servidor no
+    // contesta, se entra con la apariencia por defecto y se sigue.
     conectarSelectorDeModo();
-    await cargarModoApp();
-    try { await cargarTemaApp(); } catch (_) {}
+    await antesDeEntrar('claro u oscuro', cargarModoApp);
+    await antesDeEntrar('la apariencia', cargarTemaApp);
     recuperarUltimaExportacion();
-    await cargarCuentasLogin();
+    if (!await antesDeEntrar('las cuentas', cargarCuentasLogin)) {
+        cuentasDeRespaldo('No se pudo leer la lista de cuentas.');
+    }
     await esperarInicioSesion();
     const n = new Date();
     const periodoHoy=`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}`;

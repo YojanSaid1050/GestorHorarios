@@ -10,7 +10,9 @@ aislamiento es la regla y no la excepción.
 from __future__ import annotations
 
 import importlib
+import os
 import sys
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -20,7 +22,24 @@ RAIZ = Path(__file__).resolve().parents[1]
 if str(RAIZ) not in sys.path:
     sys.path.insert(0, str(RAIZ))
 
-TEMPORAL = Path('/tmp/pruebas_gestor_horarios')
+# Ninguna prueba puede tocar la instalación de nadie. Se fija aquí, **antes** de
+# que se importe `gestor.rutas`, porque ese módulo calcula dónde vive todo al
+# importarse y ya no hay forma de cambiarlo después.
+#
+# Sin esto, una prueba que se olvidara de pedir carpeta propia escribía en la de
+# verdad: en Windows, `%LOCALAPPDATA%\GestorHorarios-datos`. Se vio desde fuera,
+# en el registro de una instalación real, con la traza de un `RuntimeError` que
+# lanza a propósito una prueba —la que comprueba que un fallo al abrir se cuenta
+# con palabras— apuntada entre los arranques de verdad. Ahí solo era ruido en un
+# archivo; la misma rendija deja a una prueba escribir en la base de datos que la
+# oficina usa todos los días.
+#
+# Se respeta si ya viene puesta: la QA fija la suya a propósito.
+os.environ.setdefault(
+    'GESTOR_DATOS',
+    str(Path(tempfile.gettempdir()) / f'gestor_bateria_{os.getpid()}'))
+
+TEMPORAL = Path(tempfile.gettempdir()) / 'pruebas_gestor_horarios'
 
 
 @pytest.fixture

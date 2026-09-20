@@ -234,3 +234,27 @@ def test_sin_la_variable_el_programa_se_comporta_como_siempre(monkeypatch):
     importlib.reload(rutas)
     assert rutas.PLANTILLA_PRIVADA == ''
     assert rutas.dato_inicial('empleados_iniciales.csv').parent == rutas.DATOS_INICIALES
+
+
+def test_la_batería_no_escribe_en_la_instalación_de_nadie():
+    """Una prueba que se olvide de pedir carpeta propia no puede tocar la real.
+
+    Pasó, y se vio desde fuera: en el registro de una instalación de Windows
+    apareció la traza de un `RuntimeError('algo interno')` —el que lanza a
+    propósito la prueba que comprueba que un fallo al abrir se cuenta con
+    palabras— apuntada entre los arranques de verdad. La prueba no pedía carpeta
+    propia, así que `gestor.rutas` apuntaba a `%LOCALAPPDATA%\\GestorHorarios-datos`
+    y escribió ahí.
+
+    Ahí solo fue ruido en un archivo. La misma rendija deja a una prueba escribir
+    en la base de datos que la oficina usa todos los días.
+    """
+    import tempfile
+
+    from gestor import rutas
+
+    temporal = Path(tempfile.gettempdir()).resolve()
+    donde = Path(rutas.RAIZ_DATOS).resolve()
+    assert temporal in donde.parents or donde == temporal, (
+        f'la batería está escribiendo en {donde}, que no es una carpeta temporal')
+    assert 'LOCALAPPDATA' not in str(donde).upper()

@@ -150,6 +150,19 @@ def comprobar() -> int:
                        'la pantalla está dentro del programa',
                        f'la página principal contestó {codigo}')
 
+        # Lo que la pantalla pide **antes** de que nadie entre.
+        #
+        # Si una de estas no contesta, el arranque de la pantalla se queda ahí y
+        # ni siquiera llega a cargar la lista de cuentas: se ve el fondo pintado,
+        # el desplegable diciendo «Cargando cuentas…» y nada más. Esta
+        # comprobación decía «la instalación está entera» mientras la pantalla
+        # de acceso estaba muerta, porque no las miraba.
+        for camino in ('/api/configuracion/modo-app', '/api/configuracion/tema-app'):
+            estado, _ = _pedir(base, camino)
+            acta.comprobar(estado == 200,
+                           f'contesta {camino}, que se pide antes de entrar',
+                           f'contestó {estado}')
+
         # Los datos iniciales: sin ellos arranca vacío y no se entiende por qué.
         estado, cuentas = _pedir(base, '/api/auth/cuentas-login')
         acta.comprobar(estado == 200 and len(cuentas.get('cuentas') or []) >= 1,

@@ -371,7 +371,11 @@ def test_la_comprobacion_mira_lo_que_de_verdad_se_ha_caido_alguna_vez():
     codigo = (RAIZ / 'gestor' / 'autocomprobacion.py').read_text(encoding='utf-8')
     for lo_que_se_mira in ('/api/salud', '/api/auth/login', '/api/empleados',
                            '/api/horarios/opciones/2026/8',
-                           '/api/operacion/restore'):
+                           '/api/operacion/restore',
+                           # Las dos que se piden antes de entrar: si una no
+                           # contesta, la pantalla de acceso no llega a cargarse.
+                           '/api/configuracion/modo-app',
+                           '/api/configuracion/tema-app'):
         assert lo_que_se_mira in codigo, f'ya no se comprueba {lo_que_se_mira}'
 
 
