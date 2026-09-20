@@ -234,12 +234,16 @@ def test_lo_que_viaja_a_la_pantalla_es_serializable_y_completo():
 
 # ------------------------------------------------- el permiso del privado
 
-def test_con_el_repositorio_publico_no_hace_falta_ningun_permiso():
-    """Como está hoy: cualquiera puede preguntar, y la respuesta es de verdad.
+def test_con_el_repositorio_publico_no_hace_falta_ningun_permiso(monkeypatch):
+    """Con el interruptor en público: cualquiera pregunta y la respuesta es real.
 
-    Es lo que hace que el programa instalado no lleve **ninguna credencial
-    encima**, que era el motivo de pasar el repositorio a público.
+    Hoy el repositorio es **privado** —el instalador que se publicaba en sus
+    Releases llevaba dentro la plantilla de la oficina—, así que este caso se
+    fuerza en vez de darse solo. Se conserva porque el interruptor existe y los
+    dos lados tienen que seguir funcionando: el día que la nómina deje de viajar
+    dentro del paquete, volver a público es cambiar una línea.
     """
+    monkeypatch.setattr(actualizaciones, 'REPOSITORIO_PRIVADO', False)
     novedad = _con(GestorFalso(novedad=None),
                    permiso=credenciales.Permiso()).consultar()
     assert novedad.hay_novedad is False

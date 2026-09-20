@@ -16,7 +16,11 @@ dynamic = ["version"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-exclude = ["datos", "dist", "build"]
+# Con barra delante, y la razón merece estar escrita: «datos» a secas es un
+# patrón de nombre, no una ruta, así que se llevaba por delante también
+# `gestor/datos/`, que es código del programa. Ocho archivos —los que hablan
+# con la base— llevaban meses sin revisar sin que nadie lo supiera.
+exclude = ["/datos", "/dist", "/build"]
 
 [tool.ruff.lint]
 select = [
@@ -125,7 +129,10 @@ known-first-party = ["gestor", "pruebas", "qa"]
 testpaths = ["pruebas"]
 python_files = ["test_*.py"]
 addopts = "-q"
-markers = ["lenta: genera meses completos y tarda"]
+markers = [
+    "lenta: genera meses completos y tarda",
+    "claves_de_fabrica: ve el bloqueo real de las contraseñas de fábrica",
+]
 
 # Ninguna prueba de esta batería tarda más de unos segundos; las que generan
 # meses enteros van marcadas como `lenta` y se piden aparte. Tres minutos es un

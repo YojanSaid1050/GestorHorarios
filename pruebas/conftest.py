@@ -61,6 +61,64 @@ def base(carpeta_de_datos):
     return modulo_base
 
 
+@pytest.fixture(autouse=True)
+def _las_pruebas_arrancan_con_la_clave_ya_cambiada(request, monkeypatch):
+    """Como una instalación donde alguien ya hizo lo que hay que hacer.
+
+    Las dos cuentas de fábrica nacen marcadas para cambiar la contraseña, y
+    mientras esa marca esté puesta el servidor no deja hacer **nada más** que
+    cambiarla: es lo que impide que la contraseña escrita dentro del instalador
+    sirva para entrar a la plantilla de la oficina.
+
+    Aquí se quita, y no es relajar la comprobación: es empezar donde empieza
+    cualquier instalación pasado el primer día. Comprobar la marca en las
+    trescientas pruebas de la batería no aporta nada y las llenaba de 403 que no
+    tenían que ver con lo que cada una miraba.
+
+    La comprobación de verdad —que se pone, que bloquea, que cambiarla
+    desbloquea y que a quien ya la cambió no se le toca— está entera en
+    `pruebas/test_claves_de_fabrica.py`, que se sale de aquí con la marca
+    `claves_de_fabrica` para ver el comportamiento real.
+    """
+    if request.node.get_closest_marker('claves_de_fabrica'):
+        yield
+        return
+
+    from gestor.servicios import acceso
+
+    original = acceso.asegurar_cuentas_iniciales
+
+    def sin_marca():
+        original()
+        from gestor.datos.base import transaccion
+        with transaccion() as conexion:
+            conexion.execute('UPDATE usuarios SET requiere_cambio_clave=0')
+
+    monkeypatch.setattr(acceso, 'asegurar_cuentas_iniciales', sin_marca)
+    # Y la reparación de instalaciones antiguas, que corre justo después y
+    # volvería a marcarlas: la contraseña de estas cuentas **es** la de fábrica,
+    # porque es con la que entran las pruebas.
+    monkeypatch.setattr(acceso, 'marcar_las_claves_de_fabrica_que_siguen_puestas',
+                        lambda: 0)
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _sin_intentos_fallidos_heredados():
+    """El contador de intentos fallidos vive en memoria, no en la base.
+
+    Es lo correcto en la oficina —se olvida al reiniciar, nadie se queda fuera
+    de su propio programa por un contador que sobrevivió a un apagón— pero
+    significa que sobrevive también de una prueba a la siguiente, que sí
+    comparten proceso. Varias pruebas entran mal a propósito; sin esto, la
+    sexta se encontraría un 429 que no tiene nada que ver con lo que mira.
+    """
+    from gestor.servicios import acceso
+    acceso.olvidar_los_fallos()
+    yield
+    acceso.olvidar_los_fallos()
+
+
 @pytest.fixture(scope='session', autouse=True)
 def _sin_restos_de_ejecuciones_anteriores():
     import shutil

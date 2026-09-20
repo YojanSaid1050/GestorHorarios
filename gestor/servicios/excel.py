@@ -99,6 +99,12 @@ def _header(cell, color='5B2A86'):
     cell.border = _borde()
 
 
+#: Con lo que empieza una fórmula. Un nombre, un cargo o una descripción que
+#: empiece por uno de estos caracteres no es una fórmula: es texto que alguien
+#: escribió, y tiene que verse tal cual.
+EMPIEZA_UNA_FORMULA = ('=', '+', '-', '@', '\t', '\r')
+
+
 def _cell(cell, center=True):
     cell.border = _borde()
     cell.alignment = Alignment(
@@ -106,6 +112,31 @@ def _cell(cell, center=True):
         vertical='center',
         wrap_text=True,
     )
+
+
+def _solo_texto(cell):
+    """Lo que alguien escribió se imprime; no se ejecuta.
+
+    Los textos libres del horario —el cargo, el nombre, la descripción de una
+    asignación— se entregaban a openpyxl tal cual. Una persona apuntada como
+    `=1+1` se guardaba como **fórmula**, y el Excel que se reparte enseñaba `2`
+    donde tenía que ir un nombre. Con algo menos inocente que `=1+1` —y las
+    hojas de cálculo tienen funciones que leen archivos y abren enlaces— el
+    papel deja de ser un papel.
+
+    Marcar la celda como cadena basta en un .xlsx: se guarda entre los textos
+    del libro y Excel no vuelve a mirarla como fórmula.
+
+    No se hace dentro de `_cell` a propósito: el libro tiene celdas que **sí**
+    son fórmulas puestas por el programa —el espejo que trae el turno desde la
+    hoja de semanas, y los contadores auxiliares de rachas— y pasan por ahí.
+    Esto se aplica a los textos que vienen de la plantilla, que son los que
+    escribe una persona.
+    """
+    valor = cell.value
+    if isinstance(valor, str) and valor.startswith(EMPIEZA_UNA_FORMULA):
+        cell.data_type = 's'
+    return cell
 
 
 def _fecha_corta(iso: str) -> str:
@@ -443,7 +474,7 @@ def _hoja_horario(wb, titulo: str, resultado: dict, dias: list[dict],
             pareja,
         ]
         for col, value in enumerate(values, 1):
-            _cell(ws.cell(row, col, value), center=col != 2)
+            _cell(_solo_texto(ws.cell(row, col, value)), center=col != 2)
 
         # Los días de esta hoja, no los de todo el período: la hoja del mes
         # tiene menos columnas y antes se le escribían de más, corridas.

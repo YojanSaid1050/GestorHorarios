@@ -31,7 +31,7 @@ from gestor.datos import horarios
 from gestor.datos.base import abierta, transaccion
 from gestor.dominio import calendario, cobertura
 from gestor.dominio.codigos import TRABAJADOS
-from gestor.servicios import periodos, reglas_cobertura
+from gestor.servicios import reglas_cobertura
 
 
 def _dias_por_fecha(fila: dict) -> dict:
@@ -252,7 +252,10 @@ def publicar(horario_id: int, confirmar_excepciones: bool = False) -> dict:
         conexion.execute(
             "UPDATE horarios SET publicado=1, publicado_en=datetime('now') WHERE id=?",
             (int(horario_id),))
-    periodos.limpiar(mes, anio)
+    # Publicar no incorpora nada: reparte lo que ya estaba elegido. Borrar aquí
+    # el aviso era la otra forma de hacerlo desaparecer sin resolver nada —basta
+    # con volver a publicar el oficial de siempre— y dejaba el mes repartido con
+    # novedades aprobadas fuera y sin rastro de que lo estuvieran.
     return {
         'anio': anio, 'mes': mes,
         'resumen': revisar(horarios.obtener(horario_id)),

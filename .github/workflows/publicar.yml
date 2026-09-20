@@ -89,6 +89,7 @@ jobs:
         shell: pwsh
         env:
           GESTOR_NOMINA: ${{ secrets.GESTOR_NOMINA }}
+          GESTOR_PERMISO: ${{ secrets.GESTOR_PERMISO }}
         run: |
           if (-not $env:GESTOR_NOMINA) {
             Write-Error ("Falta el secreto GESTOR_NOMINA. Se publicaria un " +
@@ -99,6 +100,7 @@ jobs:
       - name: Construir el instalador
         env:
           GESTOR_NOMINA: ${{ secrets.GESTOR_NOMINA }}
+          GESTOR_PERMISO: ${{ secrets.GESTOR_PERMISO }}
         run: python empaquetado/construir.py
 
       - name: Publicar en la versión de GitHub

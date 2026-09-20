@@ -42,7 +42,8 @@ VERSION_ESQUEMA = 1
 
 _AREAS = ','.join(f"'{a}'" for a in AREAS)
 _TURNOS = ','.join(f"'{c}'" for c in codigos.TODOS)
-_ADMINISTRATIVOS = ','.join(f"'{c}'" for c in sorted(set(codigos.ADMINISTRATIVOS_POR_AREA.values())))
+_ADMINISTRATIVOS = ','.join(
+    f"'{c}'" for c in sorted(set(codigos.ADMINISTRATIVOS_POR_AREA.values())))
 
 ESQUEMA = f"""
 PRAGMA foreign_keys = ON;
@@ -77,6 +78,12 @@ CREATE TABLE IF NOT EXISTS empleados (
     -- de alta a alguien en septiembre lo metía también en agosto.
     alta_desde           TEXT NOT NULL DEFAULT '2026-08-01',
     retirado_desde       TEXT,
+    -- Con qué nombre venía esta persona en la plantilla inicial, si vino de
+    -- ahí. Es lo que permite reconocerla después de un cambio de nombre: la
+    -- siembra corre en cada arranque y usaba el nombre como identidad, así que
+    -- corregir una tilde hacía reaparecer a la persona anterior al día
+    -- siguiente, duplicada y sin pareja.
+    origen_siembra       TEXT,
     FOREIGN KEY(pareja_id) REFERENCES empleados(id) ON DELETE SET NULL
 );
 
@@ -87,6 +94,12 @@ CREATE TABLE IF NOT EXISTS empleados_historial (
     empleado_id   INTEGER NOT NULL,
     vigente_desde TEXT NOT NULL,
     datos_json    TEXT NOT NULL,
+    -- Qué personas cambiaron juntas. Dos de una pareja de PC cambian a la vez y
+    -- en turnos contrarios, así que deshacer una sin la otra las deja a las dos
+    -- en el mismo turno. Antes se buscaba a la pareja **de hoy** con la misma
+    -- fecha: si la pareja había cambiado desde entonces, se deshacía el cambio
+    -- de alguien que nunca estuvo en él.
+    grupo         TEXT,
     creado_en     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(empleado_id) REFERENCES empleados(id) ON DELETE CASCADE
 );
@@ -121,6 +134,13 @@ CREATE TABLE IF NOT EXISTS solicitudes (
     turno_solicitado      TEXT CHECK(turno_solicitado IN ('AM','PM') OR turno_solicitado IS NULL),
     dia_descanso_solicitado INTEGER CHECK(dia_descanso_solicitado BETWEEN 0 AND 6
                                           OR dia_descanso_solicitado IS NULL),
+    -- De cuándo a cuándo dura una capacitación. La pantalla pedía las dos horas
+    -- desde el principio y no había dónde guardarlas: se tiraban al llegar, y
+    -- luego el motor intentaba leerlas igualmente y se llevaba el mes por
+    -- delante. Vacías significan «una jornada entera», que es lo que hace
+    -- falta saber para el horario.
+    hora_inicio           TEXT,
+    hora_fin              TEXT,
     -- Cancelada no es rechazada: rechazar es «no te lo concedo», cancelar es
     -- «se concedió y luego no hizo falta». En el historial se leen distinto.
     estado                TEXT NOT NULL DEFAULT 'pendiente'
@@ -321,13 +341,35 @@ CREATE INDEX IF NOT EXISTS idx_ajustes_fecha       ON ajustes_manuales(fecha, ac
 CREATE INDEX IF NOT EXISTS idx_asignaciones_grupo  ON asignaciones(grupo_id);
 CREATE INDEX IF NOT EXISTS idx_historial_fecha     ON historial(creado_en DESC);
 CREATE INDEX IF NOT EXISTS idx_periodos_sucio      ON periodos(sucio, anio, mes);
-CREATE INDEX IF NOT EXISTS idx_historial_persona   ON empleados_historial(empleado_id, vigente_desde);
+CREATE INDEX IF NOT EXISTS idx_historial_persona
+    ON empleados_historial(empleado_id, vigente_desde);
 """
+
+
+def _columnas_que_faltan(conexion: sqlite3.Connection) -> None:
+    """Columnas añadidas después, para una base que ya existe.
+
+    `CREATE TABLE IF NOT EXISTS` no toca una tabla que ya está, así que una base
+    de la oficina se quedaría sin las columnas nuevas y seguiría fallando igual.
+    Se añaden de una en una y solo si faltan: no se reescribe ni se borra nada.
+    """
+    faltantes = {
+        'solicitudes': (('hora_inicio', 'TEXT'), ('hora_fin', 'TEXT')),
+        'empleados_historial': (('grupo', 'TEXT'),),
+        'empleados': (('origen_siembra', 'TEXT'),),
+    }
+    for tabla, columnas in faltantes.items():
+        puestas = {fila[1] for fila in
+                   conexion.execute(f'PRAGMA table_info({tabla})').fetchall()}
+        for nombre, tipo in columnas:
+            if nombre not in puestas:
+                conexion.execute(f'ALTER TABLE {tabla} ADD COLUMN {nombre} {tipo}')
 
 
 def crear(conexion: sqlite3.Connection) -> None:
     """Deja la base con su forma definitiva. Se puede llamar siempre."""
     conexion.executescript(ESQUEMA)
+    _columnas_que_faltan(conexion)
     conexion.execute(
         'INSERT OR REPLACE INTO configuracion(clave, valor) VALUES(?, ?)',
         ('version_esquema', str(VERSION_ESQUEMA)))

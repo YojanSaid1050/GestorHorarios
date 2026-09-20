@@ -26,6 +26,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -33,6 +34,7 @@ from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from gestor.datos.base import abierta, transaccion
+from gestor.servicios import historial
 
 ADMIN_INICIAL = ('admin', 'Administrador', 'xYojanSaidx1050')
 OPERADOR_INICIAL = ('katerine', 'Katerine Manzanares', 'Kate2026*')
@@ -115,7 +117,21 @@ def _coincide(contrasena: str, sal_hex: Optional[str], esperado: Optional[str]) 
 # ------------------------------------------------------------- las cuentas
 
 def asegurar_cuentas_iniciales() -> None:
-    """Crea las dos cuentas de fábrica. Nunca pisa una contraseña ya cambiada."""
+    """Crea las dos cuentas de fábrica. Nunca pisa una contraseña ya cambiada.
+
+    Nacen **marcadas para cambiar la contraseña**, y hasta que alguien la
+    cambie esa cuenta no puede hacer otra cosa.
+
+    Las dos contraseñas de fábrica están escritas aquí arriba, y «aquí arriba»
+    es dentro del programa que se instala en la oficina: quien abra el
+    ejecutable las lee. Mientras nadie las cambie, cualquiera que llegue a ese
+    equipo entra como administrador y puede autorizar un borrado de los que no
+    tienen vuelta atrás.
+
+    La marca existía en la tabla desde el principio, viajaba dentro de la
+    sesión, y no la ponía nadie ni la miraba nadie. Aquí se pone; en
+    `comprobar_permiso` se mira.
+    """
     with transaccion() as conexion:
         for (usuario, nombre, contrasena), rol in (
                 (ADMIN_INICIAL, 'admin'), (OPERADOR_INICIAL, 'operador')):
@@ -125,8 +141,37 @@ def asegurar_cuentas_iniciales() -> None:
                 continue
             sal, resumen = _derivar(contrasena)
             conexion.execute(
-                'INSERT INTO usuarios(usuario, nombre, rol, password_salt, password_hash) '
-                'VALUES(?,?,?,?,?)', (usuario, nombre, rol, sal, resumen))
+                'INSERT INTO usuarios(usuario, nombre, rol, password_salt, '
+                'password_hash, requiere_cambio_clave) VALUES(?,?,?,?,?,1)',
+                (usuario, nombre, rol, sal, resumen))
+
+
+def marcar_las_claves_de_fabrica_que_siguen_puestas() -> int:
+    """Para las instalaciones que ya existen, que es donde está el problema.
+
+    Marcar solo las cuentas nuevas no arregla nada en la oficina, que lleva
+    meses funcionando con las dos contraseñas de fábrica porque nunca se le pidió
+    otra cosa.
+
+    Se comprueba una a una contra la contraseña conocida. A quien ya la cambió
+    no se le toca: su resumen no coincide y se la deja en paz. Devuelve cuántas
+    se marcaron, que en un arranque normal es cero.
+    """
+    marcadas = 0
+    with transaccion() as conexion:
+        for usuario, _nombre, contrasena in (ADMIN_INICIAL, OPERADOR_INICIAL):
+            fila = conexion.execute(
+                'SELECT id, password_salt, password_hash, requiere_cambio_clave '
+                'FROM usuarios WHERE usuario=?', (usuario,)).fetchone()
+            if fila is None or fila['requiere_cambio_clave']:
+                continue
+            if not _coincide(contrasena, fila['password_salt'], fila['password_hash']):
+                continue
+            conexion.execute(
+                'UPDATE usuarios SET requiere_cambio_clave=1 WHERE id=?',
+                (int(fila['id']),))
+            marcadas += 1
+    return marcadas
 
 
 def cuentas_para_entrar() -> list[dict]:
@@ -207,16 +252,68 @@ def cambiar_contrasena(usuario_id: int, nueva: str, actual: Optional[str] = None
 
 # -------------------------------------------------------------- la sesión
 
+#: Cuántos intentos fallidos seguidos se admiten antes de hacer esperar, y
+#: cuánto se espera. Son tres personas en una oficina, no un servicio público:
+#: el objetivo no es parar un ataque distribuido, es que probar contraseñas a
+#: mano deje de ser gratis.
+INTENTOS_ANTES_DE_ESPERAR = 5
+SEGUNDOS_DE_ESPERA = 30
+
+#: Por usuario, los fallos seguidos y cuándo fue el último. En memoria y no en
+#: la base a propósito: esto se olvida al reiniciar, que es justo lo que se
+#: quiere —nadie debe quedarse fuera de su propio programa por un contador que
+#: sobrevivió a un apagón— y no ensucia las copias de seguridad.
+_fallos_seguidos: dict[str, tuple[int, float]] = {}
+
+
+def _cuanto_hay_que_esperar(usuario: str) -> int:
+    """Segundos que faltan, o cero si se puede intentar ya."""
+    cuantos, ultimo = _fallos_seguidos.get(usuario, (0, 0.0))
+    if cuantos < INTENTOS_ANTES_DE_ESPERAR:
+        return 0
+    faltan = SEGUNDOS_DE_ESPERA - (time.monotonic() - ultimo)
+    return max(0, int(faltan) + 1) if faltan > 0 else 0
+
+
+def _apuntar_el_fallo(usuario: str) -> None:
+    """Un fallo más para esa cuenta, y la hora en que fue."""
+    cuantos, _ = _fallos_seguidos.get(usuario, (0, 0.0))
+    _fallos_seguidos[usuario] = (cuantos + 1, time.monotonic())
+
+
+def olvidar_los_fallos(usuario: str = '') -> None:
+    """Borra la cuenta de intentos: de una persona, o de todas.
+
+    La usa el administrador cuando alguien se ha quedado esperando y hay prisa,
+    y la usan las pruebas para no arrastrar de una a otra un contador que vive
+    en memoria y no en la base.
+    """
+    nombre = str(usuario or '').strip().lower()
+    if nombre:
+        _fallos_seguidos.pop(nombre, None)
+    else:
+        _fallos_seguidos.clear()
+
+
 def entrar(usuario: str, contrasena: str) -> dict:
+    nombre = str(usuario or '').strip().lower()
+    espera = _cuanto_hay_que_esperar(nombre)
+    if espera:
+        raise HTTPException(429, (
+            f'Demasiados intentos seguidos. Espera {espera} segundos y vuelve a '
+            'probar. Si no recuerdas la contraseña, quien lleve la cuenta de '
+            'administrador puede ponerte una nueva.'))
     with abierta() as conexion:
         fila = conexion.execute(
             'SELECT * FROM usuarios WHERE usuario=? AND activo=1',
-            (str(usuario or '').strip().lower(),)).fetchone()
+            (nombre,)).fetchone()
     # El mismo mensaje para «no existe» y para «la contraseña no es esa»: decir
     # cuál de las dos falló es decirle a quien lo intenta qué usuarios existen.
     if fila is None or not _coincide(str(contrasena or ''), fila['password_salt'],
                                      fila['password_hash']):
+        _apuntar_el_fallo(nombre)
         raise HTTPException(401, 'El usuario o la contraseña no son correctos.')
+    _fallos_seguidos.pop(nombre, None)
 
     ficha = secrets.token_urlsafe(32)
     with transaccion() as conexion:
@@ -262,6 +359,19 @@ def limpiar_sesiones_caducadas() -> int:
 
 # ------------------------------------------------------------ los permisos
 
+#: Lo único que puede hacer una cuenta que todavía tiene la contraseña de
+#: fábrica: cambiarla, mirar quién es, y salir.
+#:
+#: Lo demás se le niega, incluido leer. Una contraseña que viene escrita dentro
+#: del programa no es una contraseña: es una puerta abierta, y la plantilla de
+#: la oficina está detrás.
+MIENTRAS_NO_CAMBIE_LA_CLAVE = (
+    ('PUT', '/api/auth/password'),
+    ('GET', '/api/auth/session'),
+    ('POST', '/api/auth/logout'),
+)
+
+
 def puede(usuario: dict, metodo: str, camino: str) -> bool:
     if usuario.get('rol') == 'admin':
         return True
@@ -283,12 +393,47 @@ async def comprobar_permiso(peticion: Request, siguiente):
     if usuario is None:
         return JSONResponse(status_code=401,
                             content={'detail': 'Inicia sesión para usar la aplicación.'})
+    # Con la contraseña de fábrica todavía puesta, esta cuenta no hace nada más
+    # que cambiarla. La marca estaba en la tabla desde el principio y viajaba
+    # dentro de la sesión; lo que faltaba era esto, mirarla.
+    if usuario.get('requiere_cambio_clave') and (
+            peticion.method, camino) not in MIENTRAS_NO_CAMBIE_LA_CLAVE:
+        return JSONResponse(status_code=403, content={'detail': (
+            'Esta cuenta todavía tiene la contraseña con la que vino el '
+            'programa, y esa contraseña está escrita dentro del instalador: la '
+            'puede leer cualquiera que lo abra. Cámbiala en Configuración → Mi '
+            'contraseña y el resto de la aplicación se desbloquea.')})
+
     if not puede(usuario, peticion.method, camino):
         return JSONResponse(status_code=403, content={'detail': (
             'Tu perfil no tiene permiso para esto. Pídeselo a quien lleve la '
             'cuenta de administrador.')})
     peticion.state.usuario = usuario
-    return await siguiente(peticion)
+    # Y queda apuntado quién es, para que el historial lo sepa sin tener que
+    # arrastrar el nombre por quince funciones.
+    #
+    # `historial.actor_actual` existía desde el principio, su comentario decía
+    # «se pone al entrar por la web», y no lo ponía nadie: todas las anotaciones
+    # que no fueran de la pantalla de acceso se guardaban con el autor en
+    # blanco. El registro contaba qué pasó y no quién lo hizo, que es justo la
+    # mitad por la que se consulta.
+    marca = historial.actor_actual.set(_como_actor(usuario))
+    try:
+        return await siguiente(peticion)
+    finally:
+        # Se restablece siempre: el contexto se hereda entre tareas, y dejarlo
+        # puesto atribuiría a esta persona lo que hiciera la siguiente petición
+        # que reutilizara el contexto.
+        historial.actor_actual.reset(marca)
+
+
+def _como_actor(usuario: dict) -> str:
+    """Quién, tal y como se lee en el registro: nombre, cuenta y perfil."""
+    nombre = str(usuario.get('nombre') or '').strip()
+    cuenta = str(usuario.get('usuario') or '').strip()
+    rol = str(usuario.get('rol') or '').strip()
+    etiqueta = f'{nombre} ({cuenta})' if nombre and cuenta else (nombre or cuenta or '')
+    return f'{etiqueta} · {rol}' if etiqueta and rol else etiqueta
 
 
 def exigir_contrasena_de_administrador(peticion: Request) -> None:

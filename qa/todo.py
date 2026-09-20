@@ -36,6 +36,7 @@ TANDA = [
     ('la aplicación usada con un navegador', [sys.executable, 'qa/pantalla.py']),
     ('todos los botones y formularios', [sys.executable, 'qa/interfaz.py']),
     ('la barra propia de la ventana', [sys.executable, 'qa/ventana.py']),
+    ('cada novedad cruzada con cada otra', [sys.executable, 'qa/cruces.py']),
     ('que todo se lea, en claro y en oscuro', [sys.executable, 'qa/visual.py']),
 ]
 

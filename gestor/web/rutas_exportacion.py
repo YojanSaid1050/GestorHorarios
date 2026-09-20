@@ -67,6 +67,25 @@ def _construir(anio: int, mes: int, peticion: Peticion) -> Path:
     if peticion.libro == 'semana' and not peticion.semana_inicio:
         raise ValueError('Elige qué semana quieres exportar.')
 
+    # El horario que se pide por identificador tiene su propio mes, y no tenía
+    # por qué ser el de la dirección. Se sobrescribía sin comparar: pedir el
+    # horario de octubre desde la dirección de noviembre producía un Excel con
+    # los turnos de octubre y «Noviembre 2026» impreso en la cabecera. Ese papel
+    # se reparte, y quien lo recibe no tiene forma de saber cuál de las dos
+    # cosas es la equivocada.
+    if int(elegido['anio']) != int(anio) or int(elegido['mes']) != int(mes):
+        suyo = calendario.nombre_del_periodo(int(elegido['mes']), int(elegido['anio']))
+        raise ValueError(
+            f'Esa programación es de {suyo} y se está pidiendo como '
+            f'{calendario.nombre_del_periodo(mes, anio)}. Exporta cada mes desde '
+            'su propia pantalla.')
+    if peticion.semana_inicio:
+        inicio, fin = calendario.rango(int(mes), int(anio))
+        if not (inicio.isoformat() <= str(peticion.semana_inicio)[:10] <= fin.isoformat()):
+            raise ValueError(
+                f'La semana del {peticion.semana_inicio} no está dentro de '
+                f'{calendario.nombre_del_periodo(mes, anio)}.')
+
     resultado = dict(elegido['datos'])
     resultado['mes'], resultado['anio'] = int(mes), int(anio)
     resultado['_export_libro'] = peticion.libro

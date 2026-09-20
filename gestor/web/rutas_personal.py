@@ -19,7 +19,7 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from gestor.datos import personal
 from gestor.dominio import calendario, cobertura
@@ -56,8 +56,29 @@ class Ficha(BaseModel):
 
 
 class Retiro(BaseModel):
+    """La salida de alguien. La fecha es el **último día vigente**.
+
+    Se comprueba aquí, antes de que nada llegue al endpoint. Se comprobaba
+    después de escribir: se retiraba a la persona con el texto tal cual en
+    `retirado_desde` y solo entonces se intentaba leer la fecha para calcular el
+    día siguiente. El error saltaba, la respuesta era un fallo, y la persona se
+    quedaba retirada con una fecha que no es una fecha —invisible en la
+    plantilla y sin forma de deshacerlo desde la pantalla—.
+    """
+
     fecha_retiro: str
     motivo: Optional[str] = None
+
+    @field_validator('fecha_retiro')
+    @classmethod
+    def _es_una_fecha(cls, valor: str) -> str:
+        from datetime import date as _date
+        try:
+            return _date.fromisoformat(str(valor)[:10]).isoformat()
+        except (TypeError, ValueError):
+            raise ValueError(
+                f'«{valor}» no es una fecha. Tiene que ser el último día que la '
+                'persona trabaja, con el formato AAAA-MM-DD.') from None
 
 
 class CambioDeTurno(BaseModel):
@@ -93,10 +114,25 @@ def _obtener(empleado_id: int) -> dict:
     return ficha
 
 
-def _a_columnas(datos: dict) -> dict:
-    """De lo que envía la pantalla a lo que entiende la base."""
+def _a_columnas(datos: dict, es_alta: bool) -> dict:
+    """De lo que envía la pantalla a lo que entiende la base.
+
+    `vigente_desde` significa dos cosas distintas según de dónde venga, y
+    confundirlas borraba la historia de una persona:
+
+    * **al dar de alta** es su primer día, y ahí sí es la columna `alta_desde`;
+    * **al editar la ficha** es «desde cuándo rige este cambio», que es otra
+      cosa: la persona lleva en la oficina desde antes. Eso se guarda como un
+      tramo en `empleados_historial`, no tocando su fecha de alta.
+
+    Las dos usaban la misma traducción. Corregirle el turno a alguien poniendo
+    «rige desde el 16 de noviembre» le cambiaba el alta de agosto a noviembre y
+    **la borraba de todos los meses anteriores**: octubre se volvía a generar
+    sin ella, y sus turnos se repartían entre los demás. Un mes ya entregado
+    cambiaba solo por haber corregido una ficha.
+    """
     columnas = {k: v for k, v in datos.items() if k not in ('auto_asignado', 'vigente_desde')}
-    if datos.get('vigente_desde'):
+    if es_alta and datos.get('vigente_desde'):
         columnas['alta_desde'] = datos['vigente_desde']
     return columnas
 
@@ -153,7 +189,7 @@ def crear(ficha: Ficha):
     if not str(datos.get('nombre') or '').strip():
         raise ValueError('Escribe el nombre de la persona.')
     pareja = datos.pop('pareja_id', None)
-    identificador = personal.crear(_a_columnas(datos))
+    identificador = personal.crear(_a_columnas(datos, es_alta=True))
     if pareja:
         personal.emparejar(identificador, int(pareja))
     historial.anotar('alta_personal', 'empleado',
@@ -177,7 +213,7 @@ def actualizar(empleado_id: int, ficha: Ficha):
     _validar(datos)
     pareja = datos.pop('pareja_id', 'sin cambio')
     desde = datos.get('vigente_desde')
-    personal.actualizar(empleado_id, _a_columnas(datos), desde)
+    personal.actualizar(empleado_id, _a_columnas(datos, es_alta=False), desde)
     if pareja != 'sin cambio':
         personal.emparejar(empleado_id, int(pareja) if pareja else None)
     historial.anotar('cambio_personal', 'empleado', {

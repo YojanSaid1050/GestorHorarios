@@ -16,6 +16,7 @@ se quedaba dando por bueno un horario que ya no coincidía con lo aprobado.
 from __future__ import annotations
 
 import json
+from datetime import date
 from typing import Optional
 
 from gestor.datos.base import abierta, transaccion
@@ -26,6 +27,7 @@ CAMPOS_SOLICITUD = (
     'modo_periodo', 'dia_semana_recurrente', 'modo_cobertura',
     'reemplazo_empleado_id', 'intercambio_empleado_id', 'turno_solicitado',
     'dia_descanso_solicitado', 'estado', 'observacion',
+    'hora_inicio', 'hora_fin',
 )
 
 CAMPOS_ASIGNACION = (
@@ -215,14 +217,61 @@ def solicitudes_para_el_motor(mes: int, anio: int) -> list[dict]:
     return listar_solicitudes(mes, anio, solo_aprobadas=True)
 
 
+def ocurrencias(solicitud: dict, desde: str, hasta: str) -> set[str]:
+    """Los días que esa novedad ocupa de verdad entre esas dos fechas.
+
+    Una novedad no es siempre un rango continuo. «Los martes libra, hasta nuevo
+    aviso» se guarda con `modo_periodo='semanal'`, el día de la semana aparte y
+    `sin_fecha_fin`, que deja `fecha_fin` igual a `fecha_inicio`. Leer solo los
+    dos extremos de la fila daba las dos respuestas equivocadas a la vez:
+
+    * **conflictos que no existían** —dos semanales de días distintos con el
+      mismo rango se declaraban incompatibles aunque sus días nunca coincidan—;
+    * **conflictos que sí existían y nadie veía** —una recurrencia abierta y
+      otra novedad en una ocurrencia posterior se declaraban compatibles,
+      porque la fila de la recurrencia «terminaba» el día en que se pidió—.
+    """
+    from datetime import timedelta
+
+    inicio = max(str(solicitud.get('fecha_inicio') or desde)[:10], str(desde)[:10])
+    if solicitud.get('sin_fecha_fin'):
+        final = str(hasta)[:10]
+    else:
+        guardado = str(solicitud.get('fecha_fin')
+                       or solicitud.get('fecha_inicio') or '')[:10]
+        final = min(guardado, str(hasta)[:10]) if guardado else str(hasta)[:10]
+    if inicio > final:
+        return set()
+
+    semanal = (str(solicitud.get('modo_periodo') or 'rango') == 'semanal'
+               and solicitud.get('dia_semana_recurrente') is not None)
+    dia_de_la_semana = int(solicitud['dia_semana_recurrente']) if semanal else None
+
+    salida, fecha = set(), date.fromisoformat(inicio)
+    tope = date.fromisoformat(final)
+    while fecha <= tope:
+        if dia_de_la_semana is None or fecha.weekday() == dia_de_la_semana:
+            salida.add(fecha.isoformat())
+        fecha += timedelta(days=1)
+    return salida
+
+
 def solapadas(empleado_id: int, desde: str, hasta: str,
-              excluir: Optional[int] = None) -> list[dict]:
+              excluir: Optional[int] = None,
+              patron: Optional[dict] = None) -> list[dict]:
     """Novedades ya aprobadas de esa persona que pisan esas fechas.
 
     Aprobar dos cosas distintas para el mismo día es una contradicción que la
     aplicación no puede resolver sola: se detecta antes de aprobar y se explica.
+
+    Se compara **día a día** y no por los extremos del rango. `patron` es la
+    novedad que se está queriendo aprobar: si también se repite —«los martes»—
+    se despliega igual, porque dos recurrencias de días distintos no chocan
+    aunque compartan el rango. Cada fila devuelta trae `fecha_del_choque`, que
+    es el día concreto del que hay que hablarle a quien lo lee.
     """
-    argumentos = [int(empleado_id), hasta, desde]
+    argumentos = [int(empleado_id), str(hasta)[:10], str(desde)[:10],
+                  str(hasta)[:10]]
     extra = ''
     if excluir is not None:
         extra = ' AND id<>?'
@@ -230,13 +279,70 @@ def solapadas(empleado_id: int, desde: str, hasta: str,
     with abierta() as conexion:
         filas = conexion.execute(
             "SELECT * FROM solicitudes WHERE empleado_id=? AND estado='aprobada' "
-            f'AND fecha_inicio<=? AND fecha_fin>=?{extra}', argumentos).fetchall()
-    return [dict(f) for f in filas]
+            'AND ((fecha_inicio<=? AND fecha_fin>=?) '
+            f'OR (sin_fecha_fin=1 AND fecha_inicio<=?)){extra}',
+            argumentos).fetchall()
+
+    mios = ocurrencias(patron or {'fecha_inicio': desde, 'fecha_fin': hasta},
+                       desde, hasta)
+    choques = []
+    for fila in filas:
+        item = dict(fila)
+        comunes = ocurrencias(item, desde, hasta) & mios
+        if comunes:
+            item['fecha_del_choque'] = min(comunes)
+            choques.append(item)
+    return choques
+
+
+def descansos_movidos_de_la_semana(empleado_id: int, desde: str, hasta: str,
+                                   excluir: Optional[int] = None) -> list[dict]:
+    """Otros «mover descanso semanal» ya aprobados en las mismas semanas.
+
+    El descanso semanal es **uno**. «Mover descanso» lo cambia de día; no añade
+    otro. Dos aprobados en la misma semana no son dos descansos: son una orden y
+    su contraria, y el motor acaba poniendo los dos días libres.
+
+    Pasó de verdad: cuatro solicitudes seguidas, dos de ellas en la semana del
+    12 de octubre, dejaron a una persona con tres días libres en siete —el
+    compensatorio del festivo del día 12, y los dos pedidos—. Las dos se
+    aprobaron sin una palabra, y el choque solo aparecía después, al generar el
+    mes entero, como un error dentro de Validación.
+
+    Se compara por semana ISO y no por fecha porque no se solapan: el 14 y el 15
+    son días distintos, así que `solapadas()` no los ve. Lo que comparten es la
+    semana, que es la unidad de la que hay un solo descanso.
+    """
+    from datetime import date, timedelta
+
+    def lunes_de(texto: str) -> str:
+        f = date.fromisoformat(str(texto)[:10])
+        return (f - timedelta(days=f.weekday())).isoformat()
+
+    semanas = set()
+    inicio, fin = date.fromisoformat(desde[:10]), date.fromisoformat(hasta[:10])
+    dia = inicio
+    while dia <= fin:
+        semanas.add((dia - timedelta(days=dia.weekday())).isoformat())
+        dia += timedelta(days=1)
+
+    argumentos = [int(empleado_id)]
+    extra = ''
+    if excluir is not None:
+        extra = ' AND id<>?'
+        argumentos.append(int(excluir))
+    with abierta() as conexion:
+        filas = conexion.execute(
+            "SELECT * FROM solicitudes WHERE empleado_id=? AND estado='aprobada' "
+            f"AND tipo='descanso'{extra}", argumentos).fetchall()
+    return [dict(f) for f in filas
+            if lunes_de(f['fecha_inicio']) in semanas
+            or lunes_de(f['fecha_fin'] or f['fecha_inicio']) in semanas]
 
 
 # ------------------------------------------------------------ asignaciones
 
-def crear_asignacion(datos: dict) -> int:
+def _valores_de_asignacion(datos: dict) -> dict:
     valores = {c: datos.get(c) for c in CAMPOS_ASIGNACION}
     valores['fechas_json'] = json.dumps(
         [str(f) for f in (datos.get('fechas') or [])], ensure_ascii=False)
@@ -250,13 +356,38 @@ def crear_asignacion(datos: dict) -> int:
     fechas = [str(f) for f in (datos.get('fechas') or [])]
     valores['vigente_desde'] = (
         valores.get('vigente_desde') or (sorted(fechas)[0] if fechas else None))
-    columnas = ', '.join(valores)
-    marcas = ', '.join('?' for _ in valores)
+    return valores
+
+
+def crear_asignacion(datos: dict) -> int:
+    return crear_asignaciones([datos])[0]
+
+
+def crear_asignaciones(muchas: list[dict]) -> list[int]:
+    """Varias asignaciones, o ninguna.
+
+    La versión masiva guardaba persona a persona, cada una con su transacción.
+    Si la cuarta fallaba —bastaba con que alguien hubiera dejado la plantilla—
+    las tres primeras ya estaban confirmadas y el mensaje era un error: quien lo
+    leía no tenía forma de saber que tres personas sí tenían la asignación
+    puesta, ni cuáles.
+
+    Aquí van todas dentro de la misma transacción: o están todas o no está
+    ninguna, que es lo que significa «asignar a este grupo».
+    """
+    filas = [_valores_de_asignacion(d) for d in muchas]
+    if not filas:
+        return []
+    creados = []
     with transaccion() as conexion:
-        cursor = conexion.execute(
-            f'INSERT INTO asignaciones({columnas}) VALUES({marcas})',
-            tuple(valores.values()))
-        return int(cursor.lastrowid)
+        for valores in filas:
+            columnas = ', '.join(valores)
+            marcas = ', '.join('?' for _ in valores)
+            cursor = conexion.execute(
+                f'INSERT INTO asignaciones({columnas}) VALUES({marcas})',
+                tuple(valores.values()))
+            creados.append(int(cursor.lastrowid))
+    return creados
 
 
 def borrar_asignacion(asignacion_id: int) -> None:
@@ -351,9 +482,12 @@ def listar_asignaciones(mes: Optional[int] = None, anio: Optional[int] = None) -
 def _toca_el_periodo(asignacion: dict, mes: int, anio: int) -> bool:
     inicio, fin = _rango(mes, anio)
     if asignacion['recurrente_indefinido']:
-        # Una asignación recurrente sin final toca todos los períodos: «los
-        # miércoles hace jornada administrativa», hasta que se quite.
-        return True
+        # Una asignación recurrente sin final toca todos los períodos **desde
+        # que empieza**: «los miércoles hace jornada administrativa, a partir de
+        # diciembre», hasta que se quite. Devolver siempre `True` la metía
+        # también en octubre, que es meses antes de que nadie la hubiera
+        # decidido.
+        return fin >= str(asignacion.get('vigente_desde') or inicio)[:10]
     return any(inicio <= str(f) <= fin for f in asignacion['fechas'])
 
 
@@ -361,9 +495,11 @@ def asignaciones_para_el_motor(mes: int, anio: int) -> list[dict]:
     """Las asignaciones del período, en la forma que el motor entiende.
 
     Una asignación recurrente se despliega aquí en los días concretos del
-    período: el motor trabaja con fechas, no con «todos los miércoles».
+    período: el motor trabaja con fechas, no con «todos los miércoles». Pero se
+    le dice **además** que era recurrente, porque de eso dependen el orden en
+    que se aplican y si un choque es un error o un aviso.
     """
-    from datetime import timedelta
+    from datetime import date, timedelta
 
     inicio, fin = calendario.rango(int(mes), int(anio))
     salida = []
@@ -376,7 +512,14 @@ def asignaciones_para_el_motor(mes: int, anio: int) -> list[dict]:
                   if inicio.isoformat() <= str(f) <= fin.isoformat()]
         if asignacion['recurrente_indefinido'] and asignacion['dias_semana']:
             dias = {int(d) for d in asignacion['dias_semana']}
-            fecha = inicio
+            # Desde cuándo se repite. Sin esto, una recurrente creada para
+            # diciembre generaba ocurrencias en octubre: la repetición empezaba
+            # el primer día del período que se estuviera armando, fuera cual
+            # fuera, y el horario se movía meses antes de que nadie lo hubiera
+            # decidido.
+            desde = asignacion.get('vigente_desde')
+            arranque = max(inicio, date.fromisoformat(str(desde)[:10])) if desde else inicio
+            fecha = arranque
             while fecha <= fin:
                 if fecha.weekday() in dias:
                     fechas.append(fecha.isoformat())
@@ -393,5 +536,21 @@ def asignaciones_para_el_motor(mes: int, anio: int) -> list[dict]:
             'cubrir_pm': asignacion.get('cubrir_pm'),
             'reemplazo_empleado_id': asignacion.get('reemplazo_empleado_id'),
             'descripcion': asignacion.get('descripcion') or '',
+            # Que se repite sola, y qué días. El motor lo necesita y no se lo
+            # daba nadie.
+            #
+            # `_es_habitual` decide tres cosas: en qué orden se aplican las
+            # asignaciones —la habitualidad primero, la fecha concreta después,
+            # porque una fecha es una instrucción para ese día y la habitualidad
+            # es lo que se hace mientras nadie diga otra cosa—, si un choque es
+            # un error o un aviso, y si el día queda marcado como
+            # `origen_habitual` para que una novedad aprobada pueda reescribirlo.
+            # Sin estos dos campos siempre era `False`: el orden dependía otra
+            # vez de cuál se hubiera creado primero, y un choque contra un
+            # «todos los lunes en PM» dejaba el mes entero sin poder generarse
+            # en vez de resolverse con un aviso.
+            'recurrente_indefinido': bool(asignacion.get('recurrente_indefinido')),
+            'dias_semana': list(asignacion.get('dias_semana') or []),
+            'vigente_desde': asignacion.get('vigente_desde'),
         })
     return salida

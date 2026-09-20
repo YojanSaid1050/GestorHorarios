@@ -53,16 +53,77 @@ def test_no_existe_ninguna_tabla_de_migraciones(base):
     assert not any('migrac' in n for n in nombres)
 
 
-def test_no_hay_migraciones_escritas_en_el_codigo():
+#: El único sitio donde se admite un `ALTER TABLE`, y con cuentagotas.
+#:
+#: La regla de fondo no cambia: nada de migraciones repartidas por el código.
+#: Pero una columna añadida después tiene que llegar a las bases que ya existen,
+#: porque `CREATE TABLE IF NOT EXISTS` no toca una tabla que ya está, y la de la
+#: oficina lleva meses funcionando.
+#:
+#: Así que se admite en una sola función, `_columnas_que_faltan`, que solo sabe
+#: añadir columnas que falten. Se deja anotado cuántas hay: si aparece una más
+#: sin tocar este número, esta prueba lo dice. Es lo contrario de desactivarla.
+MIGRACIONES_ADMITIDAS = {'esquema.py': 1}
+
+
+def test_las_migraciones_solo_viven_en_una_funcion_del_esquema():
+    """Ni una sola migración al vuelo fuera de su sitio, y contadas.
+
+    Se puso porque la versión anterior las tenía repartidas por media docena de
+    módulos y nadie sabía qué forma tenía la base en un equipo cualquiera.
+    """
     fuentes = list((RAIZ / 'gestor').rglob('*.py'))
-    sospechosas = []
+    fuera_de_sitio = []
+    cuantas = {}
     for archivo in fuentes:
         texto = archivo.read_text(encoding='utf-8')
         for numero, linea in enumerate(texto.splitlines(), 1):
-            if re.search(r'\bALTER TABLE\b', linea, re.IGNORECASE):
-                sospechosas.append(f'{archivo.name}:{numero}')
-    assert not sospechosas, (
-        'han vuelto las migraciones al vuelo: ' + ', '.join(sospechosas))
+            if not re.search(r'\bALTER TABLE\b', linea, re.IGNORECASE):
+                continue
+            if archivo.name in MIGRACIONES_ADMITIDAS:
+                cuantas[archivo.name] = cuantas.get(archivo.name, 0) + 1
+            else:
+                fuera_de_sitio.append(f'{archivo.name}:{numero}')
+    assert not fuera_de_sitio, (
+        'han vuelto las migraciones al vuelo: ' + ', '.join(fuera_de_sitio))
+    for nombre, tope in MIGRACIONES_ADMITIDAS.items():
+        assert cuantas.get(nombre, 0) <= tope, (
+            f'{nombre} tiene {cuantas[nombre]} «ALTER TABLE» y se admitían {tope}. '
+            'Si hace falta otra columna, añádela a la tabla de '
+            '`_columnas_que_faltan` y sube este número a conciencia.')
+
+
+def test_la_migracion_añade_columnas_a_una_base_que_ya_existe():
+    """Y no toca nada de lo que ya había dentro.
+
+    Es la mitad que importa: una migración que se ejecuta pero pierde datos es
+    peor que no tenerla.
+    """
+    import sqlite3
+
+    conexion = sqlite3.connect(':memory:')
+    conexion.row_factory = sqlite3.Row
+    esquema.crear(conexion)
+    conexion.execute(
+        'INSERT INTO empleados(nombre, area, tipo_turno) '
+        "VALUES('Quien Sea','gestion_social','fijo')")
+    conexion.execute(
+        "INSERT INTO solicitudes(empleado_id, tipo, fecha_inicio, fecha_fin) "
+        "VALUES(1,'capacitacion','2026-10-20','2026-10-20')")
+    conexion.commit()
+
+    # Se quitan las columnas nuevas, como estaría una base de antes.
+    conexion.execute('ALTER TABLE solicitudes DROP COLUMN hora_inicio')
+    conexion.execute('ALTER TABLE solicitudes DROP COLUMN hora_fin')
+    conexion.commit()
+
+    esquema.crear(conexion)   # como el arranque de la aplicación
+
+    columnas = {f[1] for f in conexion.execute('PRAGMA table_info(solicitudes)')}
+    assert {'hora_inicio', 'hora_fin'} <= columnas
+    fila = conexion.execute('SELECT * FROM solicitudes').fetchone()
+    assert fila['tipo'] == 'capacitacion' and fila['fecha_inicio'] == '2026-10-20'
+    assert conexion.execute('SELECT COUNT(*) FROM empleados').fetchone()[0] == 1
 
 
 # --------------------------------------------------- ninguna columna muerta

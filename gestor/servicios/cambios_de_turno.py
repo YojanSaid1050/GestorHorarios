@@ -26,6 +26,7 @@ tenía justo antes, que es lo que significa «esto no llegó a pasar».
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import date, timedelta
 
 from gestor.datos import personal
@@ -120,8 +121,13 @@ def programar(empleado_id: int, pedido: dict) -> dict:
         raise ValueError(
             f'{persona["nombre"]} ya está así. El cambio no dejaría nada distinto.')
 
+    # Quiénes cambian juntos queda escrito **ahora**, con el cambio, y no se
+    # deduce después preguntando por la pareja de hoy: la pareja de hoy puede no
+    # ser la de entonces, y deshacer el cambio le tocaba el turno a alguien que
+    # nunca estuvo en él.
+    grupo = uuid.uuid4().hex[:12]
     nombres = [persona['nombre']]
-    personal.actualizar(empleado_id, nueva, vigente_desde=desde)
+    personal.actualizar(empleado_id, nueva, vigente_desde=desde, grupo=grupo)
 
     pareja_id = persona.get('pareja_id')
     mueve_la_pareja = (pedido.get('aplicar_a_pareja', True) and pareja_id
@@ -129,7 +135,8 @@ def programar(empleado_id: int, pedido: dict) -> dict:
     if mueve_la_pareja:
         pareja = personal.obtener(int(pareja_id))
         if pareja and pareja.get('activo', True):
-            personal.actualizar(int(pareja_id), _espejo(nueva, pareja), vigente_desde=desde)
+            personal.actualizar(int(pareja_id), _espejo(nueva, pareja),
+                                vigente_desde=desde, grupo=grupo)
             nombres.append(pareja['nombre'])
 
     etiqueta = {'fijo': f'turno fijo {nueva.get("turno_fijo") or ""}'.strip(),
@@ -146,51 +153,125 @@ def programar(empleado_id: int, pedido: dict) -> dict:
     }
 
 
-def deshacer(empleado_id: int, vigente_desde: str, incluir_pareja: bool = True) -> dict:
-    """Quita ese cambio y devuelve a quien lo tenía lo que tenía justo antes.
+def _cadena(conexion, empleado_id: int) -> tuple[list, list[dict]]:
+    """La vida de esa ficha, en orden: las filas y un estado por tramo.
 
-    La pareja se deshace con ella cuando cambió el mismo día: cambian juntas y
-    en turnos contrarios, así que quitar solo una las dejaría a las dos en el
-    mismo turno.
+    Cada fila del historial guarda cómo estaba la persona **antes** de ese
+    cambio. Los estados son, entonces, esas fotos en orden y al final la ficha
+    de hoy, que es cómo quedó después del último cambio. Con `n` cambios hay
+    `n + 1` estados.
+    """
+    filas = conexion.execute(
+        'SELECT id, vigente_desde, datos_json, grupo FROM empleados_historial '
+        'WHERE empleado_id=? ORDER BY vigente_desde, id',
+        (int(empleado_id),)).fetchall()
+    actual = conexion.execute(
+        'SELECT * FROM empleados WHERE id=?', (int(empleado_id),)).fetchone()
+    if actual is None:
+        return [], []
+    estados = [json.loads(f['datos_json'] or '{}') for f in filas]
+    columnas = set(actual.keys())
+    estados.append({c: actual[c] for c in CAMPOS if c in columnas})
+    return list(filas), estados
+
+
+def _rehacer_sin(conexion, empleado_id: int, quitar_id: int) -> None:
+    """Quita un cambio de la cadena y vuelve a montar lo que venía después.
+
+    Deshacer restauraba la foto de antes sobre la ficha y borraba la fila. Con
+    un cambio posterior ya programado eso era mentira: cancelar el de octubre
+    devolvía a la persona a lo que tenía en septiembre, aunque el cambio de
+    noviembre siguiera guardado y siguiera figurando en la lista. La línea de
+    cambios y el estado que usa la aplicación dejaban de coincidir.
+
+    Lo que se hace es reconstruir. Cada cambio aporta lo que **dejó distinto**
+    respecto del tramo anterior, y eso se saca comparando dos fotos
+    consecutivas. Se quita el que sobra y se vuelven a aplicar los demás, en
+    orden, sobre el estado en el que la persona queda.
+
+    Cuando el que se quita es el último no hay nada que recomponer y todo
+    funciona igual que antes, que es el caso normal.
+    """
+    filas, estados = _cadena(conexion, empleado_id)
+    posicion = next((i for i, f in enumerate(filas)
+                     if int(f['id']) == int(quitar_id)), None)
+    if posicion is None:
+        return
+
+    saltos = [{c: estados[i + 1].get(c) for c in CAMPOS
+               if estados[i + 1].get(c) != estados[i].get(c)}
+              for i in range(len(estados) - 1)]
+
+    estado = dict(estados[posicion])
+    for i in range(posicion + 1, len(filas)):
+        # La foto de ese tramo pasa a ser el estado desde el que ahora arranca.
+        conexion.execute(
+            'UPDATE empleados_historial SET datos_json=? WHERE id=?',
+            (json.dumps(estado, ensure_ascii=False, default=str),
+             int(filas[i]['id'])))
+        estado = {**estado, **saltos[i]}
+
+    conexion.execute('DELETE FROM empleados_historial WHERE id=?',
+                     (int(quitar_id),))
+    campos = {c: v for c, v in estado.items() if c in CAMPOS}
+    if campos:
+        asignaciones = ', '.join(f'{c}=?' for c in campos)
+        conexion.execute(f'UPDATE empleados SET {asignaciones} WHERE id=?',
+                         (*campos.values(), int(empleado_id)))
+
+
+def deshacer(empleado_id: int, vigente_desde: str, incluir_pareja: bool = True) -> dict:
+    """Quita ese cambio y recompone lo que viniera después.
+
+    «Deshacer» significa «esto no llegó a pasar», no «vuelve a como estabas en
+    aquel momento». La diferencia solo se nota cuando hay un cambio posterior
+    programado, y entonces se nota mucho: cancelar el de octubre devolvía a la
+    persona a lo de septiembre y el de noviembre se quedaba en la lista sin
+    efecto ninguno.
+
+    La pareja se deshace con ella cuando cambió en el mismo acto: cambian juntas
+    y en turnos contrarios, así que quitar solo una las dejaría a las dos en el
+    mismo turno. Quién cambió con quién está escrito en el propio cambio; en los
+    guardados antes de que esa columna existiera se recurre a la pareja de hoy
+    con la misma fecha, que es lo que se hacía siempre.
     """
     fecha = _fecha(vigente_desde).isoformat()
     persona = personal.obtener(empleado_id)
     if persona is None:
         raise ValueError('Esa persona ya no está en la plantilla.')
 
-    objetivo = [int(empleado_id)]
-    pareja_id = persona.get('pareja_id')
-    if incluir_pareja and pareja_id:
-        with abierta() as conexion:
-            tiene = conexion.execute(
-                'SELECT 1 FROM empleados_historial WHERE empleado_id=? AND vigente_desde=?',
-                (int(pareja_id), fecha)).fetchone()
-        if tiene:
-            objetivo.append(int(pareja_id))
-
     deshechos: list[str] = []
     with transaccion() as conexion:
-        for eid in objetivo:
-            fila = conexion.execute(
-                'SELECT id, datos_json FROM empleados_historial '
-                'WHERE empleado_id=? AND vigente_desde=? ORDER BY id DESC LIMIT 1',
-                (eid, fecha)).fetchone()
-            if fila is None:
-                continue
-            antes = json.loads(fila['datos_json'] or '{}')
-            campos = {c: antes.get(c) for c in CAMPOS if c in antes}
-            if campos:
-                asignaciones = ', '.join(f'{c}=?' for c in campos)
-                conexion.execute(f'UPDATE empleados SET {asignaciones} WHERE id=?',
-                                 (*campos.values(), eid))
-            conexion.execute('DELETE FROM empleados_historial WHERE id=?', (fila['id'],))
+        mia = conexion.execute(
+            'SELECT id, grupo FROM empleados_historial '
+            'WHERE empleado_id=? AND vigente_desde=? ORDER BY id DESC LIMIT 1',
+            (int(empleado_id), fecha)).fetchone()
+        if mia is None:
+            raise ValueError(
+                'No hay ningún cambio de turno guardado con fecha '
+                f'{fecha} para esta persona.')
+
+        a_quitar = [(int(empleado_id), int(mia['id']))]
+        if incluir_pareja:
+            if mia['grupo']:
+                companeros = conexion.execute(
+                    'SELECT id, empleado_id FROM empleados_historial '
+                    'WHERE grupo=? AND empleado_id<>?',
+                    (str(mia['grupo']), int(empleado_id))).fetchall()
+            else:
+                pareja_id = persona.get('pareja_id')
+                companeros = conexion.execute(
+                    'SELECT id, empleado_id FROM empleados_historial '
+                    'WHERE empleado_id=? AND vigente_desde=?',
+                    (int(pareja_id), fecha)).fetchall() if pareja_id else []
+            a_quitar += [(int(f['empleado_id']), int(f['id'])) for f in companeros]
+
+        for eid, fila_id in a_quitar:
+            _rehacer_sin(conexion, eid, fila_id)
             nombre = conexion.execute(
                 'SELECT nombre FROM empleados WHERE id=?', (eid,)).fetchone()
             deshechos.append(str(nombre['nombre']) if nombre else str(eid))
 
-    if not deshechos:
-        raise ValueError(
-            f'No hay ningún cambio de turno guardado con fecha {fecha} para esta persona.')
     plural = 'n' if len(deshechos) > 1 else ''
     return {
         'deshechos': deshechos,
@@ -204,22 +285,84 @@ def deshacer(empleado_id: int, vigente_desde: str, incluir_pareja: bool = True) 
 def corregir(empleado_id: int, vigente_desde_anterior: str, pedido: dict) -> dict:
     """Cambiar la fecha o el turno de un cambio ya programado, de una vez.
 
-    Se deshace y se vuelve a poner. Hacerlo desde la pantalla en dos llamadas
-    —borrar y crear— tenía un fallo con dientes: si la segunda fallaba, el
-    cambio original ya se había perdido.
+    O no cambiar nada. Antes esto deshacía primero y programaba después, y si lo
+    segundo fallaba —un turno de inicio inválido bastaba— el cambio original ya
+    se había perdido: el error se contaba honestamente, pero el dato no volvía.
+    Una operación que falla no puede dejar rastro.
+
+    Se copia el estado de las personas que toca y sus filas de historial, se
+    intenta, y si algo sale mal se vuelve a poner exactamente como estaba.
     """
+    _validar(pedido)
+    copia = _copia_de_seguridad([int(empleado_id)] + _acompanantes(
+        int(empleado_id), _fecha(vigente_desde_anterior).isoformat()))
     antes = deshacer(empleado_id, vigente_desde_anterior)
     try:
         resultado = programar(empleado_id, pedido)
-    except Exception:                                              # noqa: BLE001
-        # Volver a dejarlo como estaba no siempre es posible —el cambio ya se
-        # deshizo—, así que se dice con claridad en vez de fingir que no pasó.
+    except Exception as fallo:                                     # noqa: BLE001
+        _restaurar(copia)
         raise ValueError(
-            f'No se pudo aplicar la corrección: el cambio del {antes["vigente_desde"]} '
-            'quedó deshecho y hay que volver a programarlo.') from None
+            f'No se pudo aplicar la corrección, así que no se ha tocado nada: '
+            f'{fallo}') from None
     resultado['anterior'] = antes['vigente_desde']
     resultado['mensaje'] = f'Cambio corregido. {resultado["mensaje"]}'
     return resultado
+
+
+def _acompanantes(empleado_id: int, fecha: str) -> list[int]:
+    """Quién más cambió en ese mismo acto, para copiarlo también."""
+    with abierta() as conexion:
+        mia = conexion.execute(
+            'SELECT grupo FROM empleados_historial '
+            'WHERE empleado_id=? AND vigente_desde=? ORDER BY id DESC LIMIT 1',
+            (int(empleado_id), fecha)).fetchone()
+        if mia is None:
+            return []
+        if mia['grupo']:
+            filas = conexion.execute(
+                'SELECT DISTINCT empleado_id FROM empleados_historial '
+                'WHERE grupo=? AND empleado_id<>?',
+                (str(mia['grupo']), int(empleado_id))).fetchall()
+        else:
+            filas = conexion.execute(
+                'SELECT DISTINCT empleado_id FROM empleados_historial '
+                'WHERE vigente_desde=? AND empleado_id<>?',
+                (fecha, int(empleado_id))).fetchall()
+    return [int(f['empleado_id']) for f in filas]
+
+
+def _copia_de_seguridad(ids: list[int]) -> dict:
+    """La ficha y el historial de esas personas, tal y como están ahora."""
+    unicos = sorted({int(i) for i in ids})
+    marcas = ', '.join('?' for _ in unicos)
+    with abierta() as conexion:
+        fichas = [dict(f) for f in conexion.execute(
+            f'SELECT * FROM empleados WHERE id IN ({marcas})', unicos)]
+        historial = [dict(f) for f in conexion.execute(
+            f'SELECT * FROM empleados_historial WHERE empleado_id IN ({marcas})',
+            unicos)]
+    return {'ids': unicos, 'fichas': fichas, 'historial': historial}
+
+
+def _restaurar(copia: dict) -> None:
+    unicos = copia['ids']
+    if not unicos:
+        return
+    marcas = ', '.join('?' for _ in unicos)
+    with transaccion() as conexion:
+        for ficha in copia['fichas']:
+            campos = {c: v for c, v in ficha.items() if c != 'id'}
+            asignaciones = ', '.join(f'{c}=?' for c in campos)
+            conexion.execute(f'UPDATE empleados SET {asignaciones} WHERE id=?',
+                             (*campos.values(), int(ficha['id'])))
+        conexion.execute(
+            f'DELETE FROM empleados_historial WHERE empleado_id IN ({marcas})', unicos)
+        for fila in copia['historial']:
+            columnas = ', '.join(fila)
+            valores = ', '.join('?' for _ in fila)
+            conexion.execute(
+                f'INSERT INTO empleados_historial({columnas}) VALUES({valores})',
+                tuple(fila.values()))
 
 
 # ------------------------------------------------------------------ listar

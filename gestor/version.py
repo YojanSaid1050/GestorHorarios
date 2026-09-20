@@ -29,15 +29,27 @@ REPOSITORIO = 'YojanSaid1050/GestorHorarios'
 
 #: ¿Hace falta identificarse para bajar una versión de ahí?
 #:
-#: Hoy **no**: el repositorio es público y el programa instalado no lleva ninguna
-#: credencial encima. Lo que vive en el repositorio son dieciocho personas
-#: inventadas; la plantilla de verdad viaja aparte y se aplica al construir.
+#: Hoy **no**: el repositorio es público, las actualizaciones se bajan sin
+#: credenciales y el programa instalado no lleva ninguna encima.
 #:
-#: Si algún día se hiciera privado, esto pasa a `True` y el instalador tiene que
-#: llevar un permiso de solo lectura dentro (ver `gestor/credenciales.py`). El
-#: interruptor existe porque la diferencia no es cosmética: con el repositorio
-#: privado y sin permiso, GitHub contesta que no existe —igual que si estuviera
-#: vacío—, y el programa se quedaría diciendo para siempre que ya está al día.
+#: ## Lo que hay pendiente aquí, y conviene que esté escrito
+#:
+#: El instalador que se publica en las Releases lleva dentro `datos_iniciales/`
+#: con la plantilla de la oficina, sus dos meses transcritos y las reglas
+#: internas con el motivo de cada una al lado. El secreto `GESTOR_NOMINA`
+#: protege la **entrada** al empaquetado, no el archivo que sale de él: con el
+#: repositorio público, cualquiera puede descargar ese instalador y leerlo.
+#:
+#: Está decidido dejarlo así por ahora y arreglarlo más adelante. Las dos formas
+#: de cerrarlo son poner el repositorio en privado —este interruptor a `True`,
+#: y los pasos están en `empaquetado/EN_WINDOWS.md`— o dejar de meter la nómina
+#: en el paquete y cargarla desde una copia privada al instalar.
+#:
+#: El interruptor existe porque la diferencia no es cosmética: con el
+#: repositorio privado y sin permiso, GitHub contesta que no existe —igual que
+#: si estuviera vacío—, y el programa se quedaría diciendo para siempre que ya
+#: está al día. Por eso, con esto en `True`, el empaquetado se **niega a
+#: construir** si falta el secreto `GESTOR_PERMISO`.
 REPOSITORIO_PRIVADO = False
 
 

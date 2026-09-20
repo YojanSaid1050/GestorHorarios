@@ -313,10 +313,9 @@ def deshacer_oficial(horario_id: int):
     guardado = horarios.obtener(horario_id)
     if guardado is None:
         raise _aviso('No se encuentra esa programación.')
-    if guardado.get('publicado'):
-        raise _aviso(
-            'Ese horario ya está publicado: la oficina lo tiene repartido. Si de '
-            'verdad hay que cambiarlo, genera el mes otra vez y publica el nuevo.')
+    # Lo que impide deshacerlo —publicado, o mes base— lo comprueba
+    # `quitar_oficial`, que es por donde pasan los dos caminos. Estaba escrito
+    # aquí y no en el otro, así que por el otro se colaba.
     anio, mes = int(guardado['anio']), int(guardado['mes'])
     horarios.quitar_oficial(anio, mes)
     historial.anotar('deshacer_oficial', 'horario', {'periodo': f'{anio}-{mes:02d}'})

@@ -187,26 +187,65 @@ def test_generar_solo_un_área_deja_el_mes_marcado_si_queda_otra(base):
     periodos.marcar(['2026-10-15'], 'novedad de una', area='comunicaciones')
     periodos.marcar(['2026-10-15'], 'novedad de otra', area='gestion_social')
 
-    periodos.limpiar(10, 2026, area='comunicaciones')
+    periodos.resolver(10, 2026, ['novedad de una'], area='comunicaciones')
 
     estado = periodos.estado(10, 2026)
     assert estado['desactualizado'] is True
     assert list(estado['areas']) == ['gestion_social']
 
-    periodos.limpiar(10, 2026, area='gestion_social')
+    periodos.resolver(10, 2026, ['novedad de otra'], area='gestion_social')
     assert periodos.estado(10, 2026)['desactualizado'] is False
 
 
-# ----------------------------------------------------------------- limpiar
+# ------------------------------------------------- hasta dónde llega un horario
 
-def test_volver_a_generar_deja_el_mes_al_día(base):
+def test_elegir_una_propuesta_resuelve_lo_que_esa_propuesta_incorporó(base):
     _fingir_horario(2026, 10)
     periodos.marcar(['2026-10-15'], 'se aprobó una novedad', area='comunicaciones')
-    periodos.limpiar(10, 2026)
+
+    periodos.resolver(10, 2026, periodos.pendientes(10, 2026))
 
     estado = periodos.estado(10, 2026)
     assert estado == {'desactualizado': False, 'razones': [], 'areas': {}}
     assert periodos.desactualizados() == []
+
+
+def test_lo_que_llegó_después_de_calcular_sigue_pendiente(base):
+    """Era el fallo: el aviso se iba sin que nada lo hubiera resuelto.
+
+    Se generaba octubre, se aprobaban unas vacaciones —el mes quedaba marcado—,
+    se volvía a generar sin elegir ninguna propuesta y el aviso desaparecía. El
+    horario oficial seguía siendo el de antes, sin las vacaciones dentro, y ya
+    no quedaba nadie diciéndolo.
+
+    Un horario incorpora lo que había cuando se calculó. Elegirlo no puede
+    resolver lo que llegó más tarde.
+    """
+    _fingir_horario(2026, 10)
+    periodos.marcar(['2026-10-15'], 'lo que ya estaba')
+    incorporados = periodos.pendientes(10, 2026)
+    periodos.marcar(['2026-10-15'], 'lo que llegó después')
+
+    periodos.resolver(10, 2026, incorporados)
+
+    estado = periodos.estado(10, 2026)
+    assert estado['desactualizado'] is True
+    assert _mensajes(estado['razones']) == ['lo que llegó después']
+
+
+def test_resolver_sin_nada_que_resolver_no_toca_el_aviso(base):
+    """Un horario de antes de que existiera esta foto no resuelve nada.
+
+    Los guardados con la versión anterior no llevan la lista dentro. Sin esto,
+    elegir uno de ellos borraría el aviso entero, que es justo lo que se está
+    arreglando.
+    """
+    _fingir_horario(2026, 10)
+    periodos.marcar(['2026-10-15'], 'se aprobó una novedad')
+
+    periodos.resolver(10, 2026, [])
+
+    assert periodos.estado(10, 2026)['desactualizado'] is True
 
 
 def test_reiniciar_borra_también_las_marcas(base):

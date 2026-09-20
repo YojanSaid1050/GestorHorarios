@@ -234,3 +234,135 @@ def test_un_alta_recién_creada_sí_se_puede_borrar(con_personal):
     resultado = cambios_de_turno.borrar_definitivo(nuevo)
     assert 'no se pierde nada' in resultado['mensaje']
     assert personal.obtener(nuevo) is None
+
+
+# ----------------------------------- una corrección que falla no deja rastro
+
+def test_una_corrección_inválida_no_borra_el_cambio_original(con_personal):
+    """Antes se deshacía primero y se programaba después.
+
+    Si lo segundo fallaba —un turno de inicio inválido bastaba— el cambio
+    original ya se había perdido. El mensaje lo contaba honestamente («quedó
+    deshecho y hay que volver a programarlo»), pero el dato no volvía: una
+    operación que falla no puede dejar rastro.
+    """
+    persona = _sin_pareja(con_personal)
+    cambios_de_turno.programar(persona['id'], {
+        **_otro_turno(persona), 'vigente_desde': '2026-10-05'})
+    despues_de_programar = dict(personal.obtener(persona['id']))
+
+    with pytest.raises(ValueError) as fallo:
+        cambios_de_turno.corregir(persona['id'], '2026-10-05', {
+            'tipo_turno': 'rotativo', 'inicio_rotacion': 'XX',
+            'vigente_desde': '2026-10-12'})
+    # Y el mensaje dice qué está mal en lo que se pidió, en vez del antiguo
+    # «quedó deshecho y hay que volver a programarlo», que describía un
+    # destrozo en lugar de un motivo.
+    assert 'con qué turno empieza' in str(fallo.value)
+
+    ahora = personal.obtener(persona['id'])
+    assert ahora['tipo_turno'] == despues_de_programar['tipo_turno']
+    assert ahora['turno_fijo'] == despues_de_programar['turno_fijo']
+    mios = [c for c in cambios_de_turno.programados()
+            if int(c['empleado_id']) == int(persona['id'])]
+    assert [c['vigente_desde'] for c in mios] == ['2026-10-05']
+
+
+def test_una_corrección_que_no_cambiaría_nada_tampoco_deja_rastro(con_personal):
+    """El otro camino: el error no salta al validar el pedido, sino al aplicarlo.
+
+    Corregir un cambio para dejarlo exactamente como estaba la persona antes de
+    él es un cambio que no cambia nada, y la aplicación lo rechaza —bien—. Pero
+    para entonces ya se ha deshecho: sin la copia de seguridad, el rechazo se
+    llevaba por delante lo que había.
+    """
+    persona = _sin_pareja(con_personal)
+    antes = dict(personal.obtener(persona['id']))
+    cambios_de_turno.programar(persona['id'], {
+        **_otro_turno(persona), 'vigente_desde': '2026-10-05'})
+
+    with pytest.raises(ValueError):
+        cambios_de_turno.corregir(persona['id'], '2026-10-05', {
+            'tipo_turno': antes['tipo_turno'], 'turno_fijo': antes['turno_fijo'],
+            'inicio_rotacion': antes.get('inicio_rotacion'),
+            'vigente_desde': '2026-10-12'})
+
+    mios = [c for c in cambios_de_turno.programados()
+            if int(c['empleado_id']) == int(persona['id'])]
+    assert [c['vigente_desde'] for c in mios] == ['2026-10-05']
+
+
+# --------------------------------- cancelar uno antiguo no pisa los de después
+
+def test_cancelar_un_cambio_antiguo_respeta_los_posteriores(con_personal):
+    """«Deshacer» es «esto no llegó a pasar», no «vuelve a como estabas entonces».
+
+    La diferencia solo se nota cuando hay un cambio posterior programado, y
+    entonces se nota mucho: cancelar el de octubre devolvía a la persona a lo
+    que tenía en septiembre, mientras el cambio de noviembre seguía guardado y
+    seguía apareciendo en la lista sin efecto ninguno.
+    """
+    persona = _sin_pareja(con_personal)
+    cambios_de_turno.programar(persona['id'], {
+        **_otro_turno(persona), 'vigente_desde': '2026-10-05'})
+    cambios_de_turno.programar(persona['id'], {
+        'tipo_turno': 'rotativo', 'inicio_rotacion': 'AM',
+        'vigente_desde': '2026-11-02'})
+
+    cambios_de_turno.deshacer(persona['id'], '2026-10-05')
+
+    ahora = personal.obtener(persona['id'])
+    assert ahora['tipo_turno'] == 'rotativo', (
+        'cancelar el cambio de octubre se llevó por delante el de noviembre')
+    mios = [c for c in cambios_de_turno.programados()
+            if int(c['empleado_id']) == int(persona['id'])]
+    assert [c['vigente_desde'] for c in mios] == ['2026-11-02']
+
+
+def test_cancelar_el_último_sigue_devolviendo_lo_que_había(con_personal):
+    """El caso normal no cambia, y conviene que quede dicho."""
+    persona = _sin_pareja(con_personal)
+    antes = dict(personal.obtener(persona['id']))
+    cambios_de_turno.programar(persona['id'], {
+        **_otro_turno(persona), 'vigente_desde': '2026-10-05'})
+
+    cambios_de_turno.deshacer(persona['id'], '2026-10-05')
+
+    ahora = personal.obtener(persona['id'])
+    assert ahora['tipo_turno'] == antes['tipo_turno']
+    assert ahora['turno_fijo'] == antes['turno_fijo']
+
+
+def test_la_pareja_que_se_deshace_es_la_que_cambió_aquel_día(con_personal):
+    """Y no la de hoy, que puede ser otra.
+
+    Se buscaba a la pareja **actual** con un cambio de la misma fecha. Si la
+    pareja había cambiado desde entonces, deshacer le tocaba el turno a alguien
+    que nunca estuvo en aquel cambio, y dejaba sin deshacer a quien sí.
+    """
+    from gestor.datos.base import abierta
+
+    una, otra = _una_pareja(con_personal)
+    tercera = next(p for p in personal.listar()
+                   if int(p['id']) not in (int(una['id']), int(otra['id']))
+                   and p['area'] == una['area'] and p.get('activo', True))
+
+    cambios_de_turno.programar(una['id'], {
+        'tipo_turno': 'fijo', 'turno_fijo': 'AM', 'vigente_desde': '2026-10-05'})
+
+    with abierta() as conexion:
+        grupos = {int(f['empleado_id']): f['grupo'] for f in conexion.execute(
+            'SELECT empleado_id, grupo FROM empleados_historial '
+            'WHERE vigente_desde=?', ('2026-10-05',))}
+    assert grupos[int(una['id'])], 'el cambio no dejó escrito quién cambió con quién'
+    assert grupos[int(una['id'])] == grupos[int(otra['id'])]
+
+    # Y ahora la pareja es otra persona. El cambio de octubre sigue siendo el de
+    # las dos de antes.
+    personal.emparejar(int(una['id']), int(tercera['id']))
+
+    resultado = cambios_de_turno.deshacer(una['id'], '2026-10-05')
+    assert sorted(resultado['deshechos']) == sorted([una['nombre'], otra['nombre']]), (
+        f'se deshizo el cambio de {resultado["deshechos"]}')
+    assert tercera['nombre'] not in resultado['deshechos'], (
+        'se le tocó el turno a alguien que no estuvo en aquel cambio')

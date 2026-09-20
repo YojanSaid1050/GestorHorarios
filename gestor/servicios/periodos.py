@@ -123,12 +123,28 @@ def _apuntar(conexion, tabla: str, clave: tuple, motivo: str,
     if motivo not in [r['mensaje'] for r in razones]:
         # Se acumulan sin repetir: si se aprueban tres vacaciones seguidas, el
         # aviso dice «hay novedades nuevas» una vez, no tres.
-        razones.append({'mensaje': motivo, 'origen': origen})
+        #
+        # Con la hora, y esa hora es la que decide si un horario está al día:
+        # el elegido incorpora lo que se aprobó **antes** de calcularlo, y nada
+        # de lo que se aprobó después. Sin ella solo se podía borrar el aviso
+        # entero o no borrarlo, y se borraba entero.
+        razones.append({'mensaje': motivo, 'origen': origen,
+                        'cuando': _ahora(conexion)})
     conexion.execute(
         f'INSERT INTO {tabla}({columnas}, sucio, razones_json) VALUES({marcas}, 1, ?) '
         f'ON CONFLICT({columnas}) DO UPDATE SET sucio=1, razones_json=excluded.razones_json, '
         "actualizado_en=datetime('now')",
         (*clave, json.dumps(razones, ensure_ascii=False)))
+
+
+def _ahora(conexion) -> str:
+    """La hora de la base, no la del reloj de Python.
+
+    `creado_en` de los horarios lo pone SQLite con `datetime('now')`, en UTC.
+    Comparar eso con un `datetime.now()` local daría horas de diferencia, y esa
+    diferencia sería justo la ventana por la que un cambio se coló sin aparecer.
+    """
+    return str(conexion.execute("SELECT datetime('now')").fetchone()[0])
 
 
 def _razones(crudo) -> list[dict]:
@@ -147,27 +163,72 @@ def _razones(crudo) -> list[dict]:
             for r in crudas]
 
 
-def limpiar(mes: int, anio: int, area: Optional[str] = None) -> None:
-    """Se llama al generar: ese mes vuelve a estar al día.
+def pendientes(mes: int, anio: int, area: Optional[str] = None) -> list[str]:
+    """Los avisos que ese mes tiene ahora mismo, como lista de mensajes.
 
-    Con área, se limpia solo esa: el período sigue marcado mientras quede
-    cualquier otra área pendiente, porque el mes no está al día hasta que lo
-    están todas.
+    Se llama **antes** de calcular un horario y se guarda con él: es lo que esa
+    propuesta incorpora. Lo que se apruebe después no está dentro, y por eso no
+    se puede borrar su aviso al elegirla.
     """
+    actual = estado(int(mes), int(anio))
+    if area:
+        return [r['mensaje'] for r in actual['areas'].get(area, [])]
+    return [r['mensaje'] for r in actual['razones']]
+
+
+def resolver(mes: int, anio: int, mensajes: Iterable[str],
+             area: Optional[str] = None) -> None:
+    """Quita esos avisos concretos, y deja los demás.
+
+    Se llama al elegir una propuesta como oficial, con la lista de avisos que
+    esa propuesta se llevó por delante —la que se guardó junto a ella al
+    calcularla—. Los que llegaron después siguen ahí, porque siguen sin estar
+    dentro del horario.
+
+    Se compara por identidad y no por la hora a propósito. La hora que guarda
+    SQLite va en segundos enteros: aprobar una novedad y generar dentro del
+    mismo segundo —que en una prueba es lo normal, y delante de la pantalla
+    tampoco es raro— dejaba las dos cosas con la misma marca de tiempo y no
+    había forma de saber cuál fue antes. Con la lista no hay ventana: se quita
+    exactamente lo que se incorporó.
+
+    Antes de esto se borraba el aviso entero, y en tres sitios: al generar, al
+    elegir y al publicar. El camino que lo delataba: generar octubre y
+    elegirlo, aprobar unas vacaciones —el mes queda marcado, bien—, volver a
+    generar sin elegir ninguna de las propuestas nuevas, y el aviso
+    desaparecía. El oficial seguía siendo el de antes, sin las vacaciones
+    dentro, y ya no lo decía nadie.
+    """
+    quitar = {str(m) for m in mensajes or ()}
+    if not quitar:
+        return
     with transaccion() as conexion:
-        if area:
-            conexion.execute(
-                'DELETE FROM periodos_area WHERE anio=? AND mes=? AND area=?',
-                (int(anio), int(mes), area))
-            queda = conexion.execute(
-                'SELECT 1 FROM periodos_area WHERE anio=? AND mes=? AND sucio=1 LIMIT 1',
-                (int(anio), int(mes))).fetchone()
-            if queda:
-                return
-        conexion.execute('DELETE FROM periodos_area WHERE anio=? AND mes=?',
-                         (int(anio), int(mes)))
-        conexion.execute('DELETE FROM periodos WHERE anio=? AND mes=?',
-                         (int(anio), int(mes)))
+        tablas = (('periodos_area', 'anio=? AND mes=? AND area=?',
+                   (int(anio), int(mes), area)),) if area else (
+            ('periodos', 'anio=? AND mes=?', (int(anio), int(mes))),
+            ('periodos_area', 'anio=? AND mes=?', (int(anio), int(mes))))
+        for tabla, donde, clave in tablas:
+            for fila in conexion.execute(
+                    f'SELECT rowid, razones_json FROM {tabla} WHERE {donde}',
+                    clave).fetchall():
+                quedan = [r for r in _razones(fila['razones_json'])
+                          if r['mensaje'] not in quitar]
+                if quedan:
+                    conexion.execute(
+                        f'UPDATE {tabla} SET razones_json=?, '
+                        "actualizado_en=datetime('now') WHERE rowid=?",
+                        (json.dumps(quedan, ensure_ascii=False), fila['rowid']))
+                else:
+                    conexion.execute(f'DELETE FROM {tabla} WHERE rowid=?',
+                                     (fila['rowid'],))
+        # El período sigue marcado mientras quede cualquier área pendiente: el
+        # mes no está al día hasta que lo están todas. Y al revés: si ya no
+        # queda ninguna, el aviso general del mes tampoco tiene sentido.
+        if area and not conexion.execute(
+                'SELECT 1 FROM periodos_area WHERE anio=? AND mes=? AND sucio=1 '
+                'LIMIT 1', (int(anio), int(mes))).fetchone():
+            conexion.execute('DELETE FROM periodos WHERE anio=? AND mes=?',
+                             (int(anio), int(mes)))
 
 
 def estado(mes: int, anio: int) -> dict:

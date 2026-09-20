@@ -191,3 +191,46 @@ def test_todo_lo_que_importa_el_programa_esta_seguido_por_git():
             faltan.append(relativo)
     assert not faltan, (
         'estos archivos del programa no están en git:\n  ' + '\n  '.join(faltan))
+
+
+# ------------------------------- probar con la plantilla real sin publicarla
+
+def test_la_plantilla_privada_se_lee_de_su_carpeta_y_no_de_git(tmp_path, monkeypatch):
+    """La variable existe para no tener que copiar la nómina encima de la otra.
+
+    La forma «obvia» de probar con los datos reales es copiar
+    `nomina/datos_iniciales/*` encima de `datos_iniciales/`. Y esa es
+    exactamente la manera de publicar una plantilla sin querer: la segunda
+    carpeta está en git y la primera no, así que un `git add -A` después de la
+    copia sube los nombres al repositorio público. Una vez empujado, borrarlo no
+    lo deshace.
+    """
+    import importlib
+
+    privada = tmp_path / 'nomina_de_mentira' / 'datos_iniciales'
+    privada.mkdir(parents=True)
+    (privada / 'empleados_iniciales.csv').write_text('inventado', encoding='utf-8')
+
+    monkeypatch.setenv('GESTOR_PLANTILLA', str(tmp_path / 'nomina_de_mentira'))
+    from gestor import rutas
+    importlib.reload(rutas)
+    try:
+        assert rutas.dato_inicial('empleados_iniciales.csv') == (
+            privada / 'empleados_iniciales.csv')
+        # Y lo que no esté en la carpeta privada se sigue leyendo de siempre.
+        assert rutas.dato_inicial('base_agosto_2026.json').parent.name == 'datos_iniciales'
+        assert 'nomina_de_mentira' not in str(rutas.dato_inicial('base_agosto_2026.json'))
+    finally:
+        monkeypatch.delenv('GESTOR_PLANTILLA', raising=False)
+        importlib.reload(rutas)
+
+
+def test_sin_la_variable_el_programa_se_comporta_como_siempre(monkeypatch):
+    """Que es lo que corre en la oficina y en el resto de la batería."""
+    import importlib
+
+    monkeypatch.delenv('GESTOR_PLANTILLA', raising=False)
+    from gestor import rutas
+    importlib.reload(rutas)
+    assert rutas.PLANTILLA_PRIVADA == ''
+    assert rutas.dato_inicial('empleados_iniciales.csv').parent == rutas.DATOS_INICIALES

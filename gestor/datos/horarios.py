@@ -126,7 +126,30 @@ def quitar_oficial(anio: int, mes: int) -> None:
 
     Se puede deshacer a propósito: marcar como oficial por error era, en la
     versión anterior, un camino sin vuelta que obligaba a reiniciar el mes.
+
+    Las dos cosas que lo impiden se comprueban **aquí** y no en la ruta. Había
+    dos caminos para lo mismo —uno por identificador de propuesta y otro por
+    año y mes— y solo el primero miraba si el horario estaba publicado: por el
+    segundo se dejaba sin oficial un mes que la oficina tenía repartido, y con
+    la misma llamada se podía vaciar agosto, que llega transcrito del Excel y
+    no se puede volver a generar. Una protección que depende de por dónde se
+    entre no es una protección.
     """
+    from gestor.dominio import calendario
+    if calendario.es_mes_base(int(mes), int(anio)):
+        raise ValueError(
+            f'{calendario.nombre_del_periodo(int(mes), int(anio))} es un mes base: '
+            'llega transcrito del Excel que la oficina ya trabajó y no se puede '
+            'volver a generar, así que dejarlo sin horario no tendría vuelta atrás.')
+    with abierta() as conexion:
+        publicado = conexion.execute(
+            'SELECT 1 FROM horarios WHERE anio=? AND mes=? AND publicado=1 LIMIT 1',
+            (int(anio), int(mes))).fetchone()
+    if publicado:
+        raise ValueError(
+            f'{calendario.nombre_del_periodo(int(mes), int(anio))} está publicado: la '
+            'oficina lo tiene repartido. Si de verdad hay que cambiarlo, genera el '
+            'mes otra vez y publica el nuevo.')
     with transaccion() as conexion:
         conexion.execute(
             'UPDATE horarios SET oficial=0, publicado=0, publicado_en=NULL '

@@ -69,15 +69,88 @@ function bloquearSesion(mensaje='') {
 }
 
 async function esperarInicioSesion() {
+    let usuario = null;
     if (sessionToken) {
         try {
-            const data = await api('/api/auth/session');
-            aplicarRolUI(data.usuario);
-            return data.usuario;
+            usuario = (await api('/api/auth/session')).usuario;
+            aplicarRolUI(usuario);
         } catch (_) { bloquearSesion(); }
     }
-    aplicarRolUI(null);
-    return new Promise(resolve => { resolverLoginPendiente = resolve; });
+    if (!usuario) {
+        aplicarRolUI(null);
+        usuario = await new Promise(resolve => { resolverLoginPendiente = resolve; });
+    }
+    // Con la contraseña de fábrica todavía puesta no se sigue. El servidor
+    // niega todo lo demás igualmente (403), así que sin esto la aplicación
+    // arrancaría a mostrar errores por todas partes sin decir el motivo.
+    if (usuario?.requiere_cambio_clave) await exigirCambioDeClave(usuario);
+    return usuario;
+}
+
+// La contraseña de fábrica no es una contraseña: viene escrita dentro del
+// instalador y la lee cualquiera que lo abra. Mientras siga puesta, el servidor
+// no deja hacer nada más que cambiarla, así que esta ventana no se puede cerrar
+// ni cancelar: es eso o salir.
+function exigirCambioDeClave(usuario) {
+    return new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-backdrop';
+        overlay.innerHTML = `<div class="modal-card">
+            <div class="modal-head"><div>
+                <h3>Cambia tu contraseña para continuar</h3>
+                <p>La cuenta <b>${esc(usuario?.usuario || '')}</b> todavía tiene la
+                contraseña con la que vino el programa, y esa contraseña está
+                escrita dentro del instalador: la puede leer cualquiera que lo
+                abra. Elige una nueva y el resto de la aplicación se desbloquea.</p>
+            </div></div>
+            <label>Contraseña actual<span class="password-field"><input id="clave-obligada-actual" type="password" autocomplete="current-password">${botonOjoClave()}</span></label>
+            <label>Contraseña nueva<span class="password-field"><input id="clave-obligada-nueva" type="password" autocomplete="new-password">${botonOjoClave()}</span></label>
+            <label>Repítela<span class="password-field"><input id="clave-obligada-repetir" type="password" autocomplete="new-password">${botonOjoClave()}</span></label>
+            <small class="muted" id="clave-obligada-aviso"></small>
+            <div class="modal-actions">
+                <button type="button" class="secondary" data-salir>Salir de la aplicación</button>
+                <button type="button" data-ok>Cambiar y continuar</button>
+            </div></div>`;
+        document.body.appendChild(overlay);
+        const $$ = id => overlay.querySelector('#' + id);
+        const aviso = $$('clave-obligada-aviso');
+        overlay.querySelectorAll('[data-toggle-password]').forEach(b => {
+            b.onclick = ev => alternarVisibilidadClave(
+                ev.currentTarget, ev.currentTarget.previousElementSibling);
+        });
+        overlay.querySelector('[data-salir]').onclick = () => cerrarSesionYRecargar();
+        overlay.querySelector('[data-ok]').onclick = async () => {
+            const nueva = $$('clave-obligada-nueva').value;
+            if (nueva !== $$('clave-obligada-repetir').value) {
+                aviso.textContent = 'Las dos contraseñas nuevas no coinciden.';
+                return;
+            }
+            try {
+                await api('/api/auth/password', {
+                    method: 'PUT',
+                    body: JSON.stringify({actual: $$('clave-obligada-actual').value,
+                                          nueva}),
+                });
+            } catch (e) {
+                aviso.textContent = e.message;
+                return;
+            }
+            // Cambiar la contraseña cierra todas las sesiones de esa cuenta, así
+            // que hay que volver a entrar. Se dice, en vez de dejar la pantalla
+            // dando errores de sesión caducada.
+            overlay.remove();
+            toast('Contraseña cambiada. Vuelve a entrar con la nueva.',
+                  'success', 'Listo');
+            setTimeout(() => cerrarSesionYRecargar(), 1200);
+            resolve();
+        };
+        setTimeout(() => $$('clave-obligada-actual').focus(), 0);
+    });
+}
+
+function cerrarSesionYRecargar() {
+    try { localStorage.removeItem('gestorhorarios_session'); } catch (_) { /* da igual */ }
+    location.reload();
 }
 
 // Un solo control para ver la contraseña: icono de ojo. El icono nativo de

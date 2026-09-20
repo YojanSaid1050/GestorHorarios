@@ -201,3 +201,48 @@ la carpeta del programa:
 
 Contesta en diez segundos qué está entero y qué falta, sobre una carpeta de datos
 temporal: no toca la de la oficina.
+
+---
+
+## Pasar el repositorio a privado · PENDIENTE, decidido para más adelante
+
+**Esto todavía no está hecho, y está escrito aquí para cuando se haga.** Hoy el
+repositorio sigue público y las actualizaciones se bajan como siempre.
+
+El problema, para que no se pierda: el instalador que se sube a una Release
+lleva dentro `datos_iniciales/` con la plantilla de la oficina, sus dos meses
+transcritos y `reglas_internas.json` —con el motivo de cada regla escrito al
+lado—. El secreto `GESTOR_NOMINA` protege la **entrada** al empaquetado, no el
+archivo que sale de él. Con el repositorio público, cualquiera puede descargar
+ese instalador y leerlo.
+
+Lo único que conviene hacer ya, y que no depende de nada de lo de abajo:
+**mirar las Releases publicadas y retirar los archivos que lleven la nómina de
+verdad**. Cambiar el código no borra lo que ya está subido.
+
+Cuando se decida cerrarlo del todo, los pasos son estos:
+
+1. **Retira las Releases antiguas.** En GitHub → Releases, borra los archivos de
+   v4.0.0 y v4.0.1. Cambiar el código no borra lo que ya está publicado.
+2. **Pon el repositorio en privado.** Settings → General → abajo del todo →
+   Change repository visibility.
+3. **Crea el permiso de lectura.** Settings del usuario → Developer settings →
+   Personal access tokens → Fine-grained tokens:
+   - Repository access: **solo** `YojanSaid1050/GestorHorarios`.
+   - Permissions → Repository permissions → **Contents: Read-only**. Nada más.
+   - Caducidad: la máxima que ofrezca, y apunta la fecha.
+4. **Guárdalo como secreto.** En el repositorio → Settings → Secrets and
+   variables → Actions → New repository secret:
+   - Nombre: `GESTOR_PERMISO`
+   - Valor: `github_pat_loquesea|2027-09-20` ← el token, una barra vertical, y
+     la fecha en que caduca.
+
+Con `REPOSITORIO_PRIVADO = True` y sin ese secreto, el empaquetado **se niega a
+construir**, y hace bien: una copia sin permiso no vuelve a enterarse de una
+versión nueva y nada lo avisa. Mientras el interruptor siga en `False`, el
+secreto sobra y no estorba: el empaquetado lo dice y sigue adelante.
+
+- [ ] El instalador nuevo abre y en Configuración → «Comprobar si hay una
+      versión nueva» no da 401.
+- [ ] Un mes antes de la fecha de caducidad, la aplicación empieza a avisar de
+      que hay que renovar el permiso.

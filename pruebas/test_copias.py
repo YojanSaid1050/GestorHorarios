@@ -100,7 +100,11 @@ def test_restaurar_devuelve_lo_que_se_había_perdido(servidor):
         '/api/operacion/restore', headers=cabeceras,
         files={'archivo': (copia.name, copia.read_bytes(), 'application/octet-stream')})
     assert respuesta.status_code == 200, respuesta.text
-    assert _cuanta_gente(servidor, cabeceras) == antes
+
+    # Y se vuelve a entrar, porque restaurar cierra todas las sesiones: las
+    # fichas abiertas venían dentro de la copia y volvían a valer solas. Es lo
+    # que el propio mensaje de la respuesta pide hacer.
+    assert _cuanta_gente(servidor, _entrar(servidor)) == antes
 
 
 def test_restaurar_guarda_antes_lo_que_había(servidor):
@@ -199,3 +203,83 @@ def test_borrar_el_historial_pide_la_contraseña_y_borra_de_verdad(servidor):
         'la pantalla lee «borradas»; si cambia de nombre, dirá «undefined»')
     assert not servidor.get('/api/operacion/auditoria',
                             headers=cabeceras).json()['historial']
+
+
+# ------------------------------- lo que se colaba aunque el archivo pareciera bueno
+
+def test_una_base_con_las_tablas_de_aquí_y_las_columnas_de_otra_cosa(servidor, tmp_path):
+    """El caso que se colaba entero: nombres correctos, dentro otra cosa.
+
+    Se comprobaban solo los nombres de las tablas. Una base con `empleados`,
+    `horarios`, `solicitudes` y `usuarios` —con un admin y alguna fila, para
+    pasar las dos comprobaciones que sí había— pero con las columnas
+    equivocadas se aceptaba con «ok», arrasaba la base de la oficina, y la
+    primera pantalla que intentara leer la plantilla devolvía un 500. Queda la
+    copia de antes, sí, pero quien restauró se encuentra con una instalación
+    que no abre y un archivo que no sabe cómo devolver a su sitio.
+    """
+    falsa = tmp_path / 'parece_una_copia.db'
+    conexion = sqlite3.connect(falsa)
+    conexion.executescript("""
+        CREATE TABLE empleados(id INTEGER PRIMARY KEY, apodo TEXT);
+        CREATE TABLE horarios(id INTEGER PRIMARY KEY, cosa TEXT);
+        CREATE TABLE solicitudes(id INTEGER PRIMARY KEY, cosa TEXT);
+        CREATE TABLE usuarios(id INTEGER PRIMARY KEY, rol TEXT);
+        INSERT INTO empleados(apodo) VALUES('alguien');
+        INSERT INTO usuarios(rol) VALUES('admin');
+    """)
+    conexion.commit()
+    conexion.close()
+
+    cabeceras = _entrar(servidor)
+    antes = _cuanta_gente(servidor, cabeceras)
+    respuesta = servidor.post(
+        '/api/operacion/restore', headers=cabeceras,
+        files={'archivo': (falsa.name, falsa.read_bytes(), 'application/octet-stream')})
+
+    assert respuesta.status_code >= 400, respuesta.text
+    assert 'columnas' in respuesta.json()['detail']
+    assert _cuanta_gente(servidor, cabeceras) == antes, (
+        'se aplicó una base que no era la de este programa')
+
+
+def test_restaurar_cierra_las_sesiones_que_venían_dentro(servidor):
+    """La tabla `sesiones` viaja en la copia, y con ella fichas ya cerradas.
+
+    Al restaurar volvían a valer: cualquiera que tuviera guardada una de
+    entonces volvía a estar dentro sin escribir nada. El mensaje ya pedía
+    volver a entrar, pero era solo un texto y nada lo obligaba.
+    """
+    cabeceras = _entrar(servidor)
+    copia = _copiar(servidor, cabeceras)
+
+    respuesta = servidor.post(
+        '/api/operacion/restore', headers=cabeceras,
+        files={'archivo': (copia.name, copia.read_bytes(), 'application/octet-stream')})
+    assert respuesta.status_code == 200, respuesta.text
+
+    # La misma ficha con la que se acaba de restaurar ya no vale.
+    assert servidor.get('/api/empleados', headers=cabeceras).status_code == 401
+
+
+def test_restaurar_olvida_las_reglas_que_tenía_en_memoria(servidor):
+    """Se leen una vez y se guardan en caché indexada por la ruta del archivo.
+
+    Esa ruta no cambia al restaurar, así que después de volver a una copia de
+    hace tres meses el programa seguía repartiendo con el tope de hoy, sin
+    decirlo, hasta que alguien lo cerrara.
+    """
+    from gestor.servicios import reglas_operacion
+
+    cabeceras = _entrar(servidor)
+    copia = _copiar(servidor, cabeceras)
+    reglas_operacion.regla()  # deja la caché llena
+    assert reglas_operacion._CACHE, 'la caché no se llenó: la prueba no probaría nada'
+
+    respuesta = servidor.post(
+        '/api/operacion/restore', headers=cabeceras,
+        files={'archivo': (copia.name, copia.read_bytes(), 'application/octet-stream')})
+    assert respuesta.status_code == 200, respuesta.text
+
+    assert not reglas_operacion._CACHE, (
+        'las reglas de la base anterior siguen en memoria después de restaurar')

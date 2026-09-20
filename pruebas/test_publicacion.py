@@ -209,8 +209,17 @@ def test_lo_que_hay_que_aceptar_se_confirma_expresamente(sembrada, base):
     assert resultado['resumen']['publicado'] is True
 
 
-def test_publicar_deja_al_día_el_mes(sembrada, base):
-    """Publicar es rehacer la foto: los avisos de «conviene regenerar» sobran."""
+def test_publicar_no_borra_el_aviso_de_que_falta_algo(sembrada, base):
+    """Esta prueba decía lo contrario, y con ella el programa hacía lo contrario.
+
+    «Publicar es rehacer la foto», decía. No lo es: publicar reparte el horario
+    que ya estaba elegido, sin recalcular nada. Borrar aquí el aviso era la
+    forma más fácil de hacerlo desaparecer sin resolverlo —volver a publicar el
+    oficial de siempre bastaba— y dejaba el mes repartido con novedades
+    aprobadas fuera y sin nada que lo dijera.
+
+    El aviso se va al **elegir** una propuesta calculada después del cambio.
+    """
     from gestor.servicios import periodos
     identificador = _guardar(base, 2026, 10, [
         _persona(1, 'Una', 'gestion_social', [_dia('2026-10-06', 'AM')]),
@@ -219,7 +228,7 @@ def test_publicar_deja_al_día_el_mes(sembrada, base):
     periodos.marcar(['2026-10-06'], 'algo cambió')
     assert periodos.estado(10, 2026)['desactualizado'] is True
     publicacion.publicar(identificador)
-    assert periodos.estado(10, 2026)['desactualizado'] is False
+    assert periodos.estado(10, 2026)['desactualizado'] is True
 
 
 def test_publicar_desplaza_al_anterior(sembrada, base):

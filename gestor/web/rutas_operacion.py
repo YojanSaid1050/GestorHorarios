@@ -269,6 +269,27 @@ def copia_de_seguridad(peticion: Request):
 #: contrario de lo que hace falta el día que alguien necesita restaurar.
 TABLAS_IMPRESCINDIBLES = ('empleados', 'horarios', 'solicitudes')
 
+#: Y las columnas sin las cuales esas tablas no sirven para nada, aunque se
+#: llamen igual.
+#:
+#: Comprobar solo el **nombre** de la tabla dejaba pasar una base con tres
+#: tablas homónimas y las columnas de otra cosa: la restauración contestaba
+#: «ok», arrasaba la base de la oficina, y la primera pantalla que intentara
+#: leer la plantilla devolvía un 500. Se conserva la copia de antes, sí, pero
+#: quien restaura se queda con una instalación que no abre y con un archivo
+#: que no sabe cómo devolver a su sitio.
+#:
+#: No se piden todas las columnas: una copia de una versión algo anterior
+#: puede no tener las últimas, y rechazarla por eso sería justo lo contrario
+#: de lo que hace falta el día que alguien necesita restaurar. Se piden las
+#: que la aplicación lee siempre.
+COLUMNAS_IMPRESCINDIBLES = {
+    'empleados': ('id', 'nombre', 'area', 'tipo_turno', 'activo'),
+    'horarios': ('id', 'anio', 'mes', 'datos_json', 'oficial'),
+    'solicitudes': ('id', 'empleado_id', 'tipo', 'estado', 'fecha_inicio'),
+    'usuarios': ('id', 'usuario', 'rol', 'password_hash', 'password_salt'),
+}
+
 
 def _es_una_copia_de_este_programa(ruta) -> str:
     """¿Ese archivo es una base de datos de esta aplicación? Devuelve el motivo.
@@ -292,6 +313,59 @@ def _es_una_copia_de_este_programa(ruta) -> str:
     faltan = [x for x in TABLAS_IMPRESCINDIBLES if x not in nombres]
     if faltan:
         return 'le faltan las tablas ' + ', '.join(faltan)
+
+    # Y que dentro haya con qué volver a entrar.
+    #
+    # Comprobar solo que existan tres **nombres** de tabla dejaba pasar
+    # cualquier archivo que los tuviera, aunque estuvieran vacíos o fueran de
+    # otro programa. Se aceptaba con «ok», se arrasaba la base de la oficina y
+    # la aplicación quedaba **sin una sola cuenta**: nadie podía volver a
+    # entrar, y desde fuera no hay forma de deshacerlo.
+    #
+    # Una copia de esta aplicación siempre trae al menos una cuenta de
+    # administrador: es lo primero que se siembra. Si no la trae, no es una
+    # copia de aquí, o está vacía; en los dos casos restaurarla deja la
+    # instalación inservible.
+    try:
+        conexion = sqlite3.connect(f'file:{ruta}?mode=ro', uri=True)
+    except sqlite3.Error:
+        return 'no se pudo abrir como base de datos'
+    try:
+        if 'usuarios' not in nombres:
+            return ('no trae ninguna cuenta con la que entrar, así que no es una '
+                    'copia de esta aplicación')
+        cuantos = conexion.execute(
+            "SELECT COUNT(*) FROM usuarios WHERE rol='admin'").fetchone()[0]
+        if not cuantos:
+            return ('no trae ninguna cuenta de administrador: restaurarla dejaría '
+                    'la aplicación sin forma de volver a entrar')
+        if not conexion.execute('SELECT COUNT(*) FROM empleados').fetchone()[0]:
+            return ('no trae ninguna persona en la plantilla: restaurarla dejaría '
+                    'la aplicación vacía')
+
+        # Que las tablas se llamen igual no basta: tienen que ser las de aquí.
+        for tabla, obligatorias in COLUMNAS_IMPRESCINDIBLES.items():
+            puestas = {str(f[1]) for f in
+                       conexion.execute(f'PRAGMA table_info({tabla})')}
+            ausentes = [c for c in obligatorias if c not in puestas]
+            if ausentes:
+                return (f'la tabla «{tabla}» no es la de este programa: le faltan '
+                        f'las columnas {", ".join(ausentes)}')
+
+        # Y que el archivo no esté corrompido por dentro. Una copia a medias
+        # —un USB que se sacó a mitad de escritura— abre y enseña sus tablas;
+        # lo que falla es más tarde, leyendo la página que se quedó rota.
+        estado = conexion.execute('PRAGMA integrity_check').fetchone()[0]
+        if str(estado).lower() != 'ok':
+            return f'el archivo está dañado por dentro ({estado})'
+        rotas = conexion.execute('PRAGMA foreign_key_check').fetchall()
+        if rotas:
+            return (f'tiene {len(rotas)} referencia(s) rotas entre tablas: es una '
+                    'copia incompleta')
+    except sqlite3.DatabaseError as fallo:
+        return f'no se pudo leer por dentro: {fallo}'
+    finally:
+        conexion.close()
     return ''
 
 
@@ -376,6 +450,7 @@ async def restaurar(peticion: Request, archivo: UploadFile = File(...)):
         antes = rutas.COPIAS / f'antes_de_restaurar_{datetime.now():%Y%m%d_%H%M%S}.db'
         _copiar_base(rutas.BASE_DE_DATOS, antes)
         _restaurar_encima(candidata)
+        _olvidar_lo_de_la_base_anterior()
     finally:
         Path(candidata).unlink(missing_ok=True)
 
@@ -385,6 +460,28 @@ async def restaurar(peticion: Request, archivo: UploadFile = File(...)):
         f'Se restauró la copia {archivo.filename}. Lo que había antes quedó '
         f'guardado en {antes.name}, por si hiciera falta volver. Vuelve a entrar '
         'con tu contraseña: las sesiones abiertas también estaban en la copia.')}
+
+
+def _olvidar_lo_de_la_base_anterior() -> None:
+    """Lo que sobrevivía a una restauración sin tener ningún derecho.
+
+    * **Las reglas en memoria.** El tope de cobertura y las reglas de operación
+      se leen una vez y se guardan en caché, indexada por la ruta del archivo
+      de base —que al restaurar no cambia—. Así que después de volver a una
+      copia de hace tres meses el programa seguía repartiendo con el tope de
+      hoy, sin decirlo, hasta que alguien lo cerrara.
+    * **Las sesiones abiertas.** La tabla `sesiones` viaja dentro de la copia,
+      y al restaurarla vuelven a valer fichas que se habían cerrado: cualquiera
+      que tuviera una guardada de entonces volvía a estar dentro. El mensaje ya
+      pedía volver a entrar, pero era solo un texto; nada lo obligaba.
+    """
+    from gestor.servicios import reglas_cobertura, reglas_operacion
+
+    reglas_cobertura.olvidar_lo_leido()
+    reglas_operacion.invalidar_cache()
+    from gestor.datos.base import transaccion
+    with transaccion() as conexion:
+        conexion.execute('DELETE FROM sesiones')
 
 
 @router.get('/copias')

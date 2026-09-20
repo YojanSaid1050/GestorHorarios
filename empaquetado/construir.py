@@ -23,6 +23,7 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -34,7 +35,8 @@ sys.path.insert(0, str(RAIZ / 'empaquetado'))
 
 import plantilla  # noqa: E402
 
-from gestor import version  # noqa: E402
+from gestor import credenciales, version  # noqa: E402
+from gestor.version import REPOSITORIO_PRIVADO  # noqa: E402
 
 SALIDA = RAIZ / 'dist' / 'GestorHorarios'
 PAQUETES = RAIZ / 'dist' / 'instalador'
@@ -140,6 +142,47 @@ def poner_la_plantilla_de_la_oficina() -> bool:
     return puesta
 
 
+#: El secreto del que sale el permiso de lectura para las actualizaciones.
+#: Se escribe `token|AAAA-MM-DD`, con la fecha en que caduca.
+VARIABLE_PERMISO = 'GESTOR_PERMISO'
+
+
+def poner_el_permiso_de_actualizaciones() -> bool:
+    """Escribir dentro del paquete el permiso con el que se buscan versiones.
+
+    Con el repositorio privado, una copia instalada **no puede preguntar a
+    GitHub si hay algo nuevo** sin identificarse: contesta que ese repositorio
+    no existe —no que no hay permiso—, así que el programa se quedaría diciendo
+    para siempre que ya está al día. Sin un error, sin un aviso, y sin que nadie
+    lo note hasta que alguien pregunte por qué la oficina sigue con una versión
+    de hace medio año.
+
+    Esta función faltaba. `credenciales.Permiso.escribir()` estaba escrita desde
+    el principio y no la llamaba nadie; `carpeta_que_lee_el_programa()` se
+    escribió para esto —lo dice su propio docstring— y solo se usaba para la
+    plantilla. Estaba todo hecho menos conectarlo.
+    """
+    crudo = os.environ.get(VARIABLE_PERMISO, '').strip()
+    if not crudo:
+        if REPOSITORIO_PRIVADO:
+            raise SystemExit(
+                f'Falta el secreto {VARIABLE_PERMISO} y el repositorio es privado. '
+                'Sin él, la copia instalada no se enteraría nunca de una versión '
+                'nueva. Escríbelo como «token|AAAA-MM-DD».')
+        print('Sin permiso de actualizaciones, que con el repositorio público es '
+              'lo normal')
+        return False
+    if '|' not in crudo:
+        raise SystemExit(
+            f'{VARIABLE_PERMISO} mal escrito. Va «token|AAAA-MM-DD», con la fecha '
+            'en la que caduca el permiso.')
+    token, caduca = (x.strip() for x in crudo.split('|', 1))
+    destino = credenciales.Permiso.escribir(
+        token, caduca, carpeta_que_lee_el_programa() / credenciales.ARCHIVO.name)
+    print(f'Permiso de actualizaciones puesto en el paquete (caduca el {caduca})')
+    return destino.is_file()
+
+
 def construir_ejecutable() -> None:
     escribir_ficha_de_version()
     if SALIDA.exists():
@@ -167,6 +210,7 @@ def construir_ejecutable() -> None:
     # Después de comprobar la carpeta y antes de empaquetarla: los datos
     # iniciales viajan **dentro** del paquete.
     poner_la_plantilla_de_la_oficina()
+    poner_el_permiso_de_actualizaciones()
     print(f'Ejecutable listo en {SALIDA}')
     autocomprobar()
 

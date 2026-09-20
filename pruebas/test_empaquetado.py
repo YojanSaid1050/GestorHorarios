@@ -525,3 +525,55 @@ def test_un_fallo_al_abrir_se_cuenta_con_palabras_y_no_con_un_volcado(monkeypatc
     assert 'no pudo abrirse' in mensaje
     assert 'registro.log' in mensaje, 'tiene que decir dónde mirar'
     assert 'Traceback' not in mensaje
+
+
+# ------------------------------------- el permiso de las actualizaciones
+
+def test_el_permiso_se_escribe_donde_el_programa_lo_busca(tmp_path, monkeypatch):
+    """Escrito un nivel más arriba, nadie lo encontraría y nadie lo diría.
+
+    Es el mismo sitio equivocado que ya costó una vez con la plantilla: el
+    programa lee sus archivos de `_internal/`, no de la carpeta del .exe. Allí,
+    el instalador se construye, el programa arranca, y sencillamente no vuelve a
+    enterarse de una actualización.
+    """
+    import sys as _sys
+
+    _sys.path.insert(0, str(RAIZ / 'empaquetado'))
+    import construir
+
+    from gestor import credenciales
+
+    salida = tmp_path / 'GestorHorarios'
+    (salida / '_internal').mkdir(parents=True)
+    monkeypatch.setattr(construir, 'SALIDA', salida)
+    monkeypatch.setenv(construir.VARIABLE_PERMISO, 'un_token_cualquiera|2027-03-15')
+
+    assert construir.poner_el_permiso_de_actualizaciones() is True
+
+    escrito = salida / '_internal' / credenciales.ARCHIVO.name
+    assert escrito.is_file(), 'no está donde el programa lo busca'
+    leido = credenciales.Permiso.leer(escrito)
+    assert leido.token == 'un_token_cualquiera'
+    assert leido.caduca == '2027-03-15'
+
+
+def test_sin_permiso_y_con_el_repositorio_privado_no_se_construye(tmp_path, monkeypatch):
+    """Publicar así deja a la oficina callada para siempre, sin un aviso.
+
+    Es justo el fallo que no se ve: no hay error, no hay pantalla roja. Solo
+    que nunca vuelve a aparecer una versión nueva.
+    """
+    import sys as _sys
+
+    _sys.path.insert(0, str(RAIZ / 'empaquetado'))
+    import construir
+
+    salida = tmp_path / 'GestorHorarios'
+    (salida / '_internal').mkdir(parents=True)
+    monkeypatch.setattr(construir, 'SALIDA', salida)
+    monkeypatch.setattr(construir, 'REPOSITORIO_PRIVADO', True)
+    monkeypatch.delenv(construir.VARIABLE_PERMISO, raising=False)
+
+    with pytest.raises(SystemExit, match='GESTOR_PERMISO'):
+        construir.poner_el_permiso_de_actualizaciones()

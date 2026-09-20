@@ -75,10 +75,27 @@ def sembrar_personal() -> int:
     parejas: list[tuple[str, str]] = []
     for fila in filas:
         nombre = (fila.get('nombre') or '').strip()
-        if not nombre or personal.por_nombre(nombre):
+        if not nombre:
+            continue
+        # Se reconoce a la persona por **de qué fila de la plantilla vino**, no
+        # por cómo se llama hoy.
+        #
+        # Esto corre en cada arranque. Con el nombre como identidad, corregirle
+        # una tilde a alguien hacía que al abrir el programa reapareciera la
+        # persona de antes: dos fichas para la misma persona, la nueva con su
+        # historia y la vieja recién nacida sin pareja, y el mes siguiente
+        # armado con las dos dentro.
+        if personal.por_origen_siembra(nombre):
+            continue
+        ya_estaba = personal.por_nombre(nombre)
+        if ya_estaba:
+            # Instalación anterior a esta columna: se apunta el origen ahora,
+            # que es lo que la protege de aquí en adelante.
+            personal.apuntar_el_origen(int(ya_estaba['id']), nombre)
             continue
         personal.crear({
             'nombre': nombre,
+            'origen_siembra': nombre,
             'cargo': (fila.get('cargo') or '').strip() or 'GUÍA SOCIAL',
             'area': (fila.get('area') or '').strip(),
             'tipo_turno': (fila.get('tipo_turno') or '').strip(),
@@ -101,7 +118,8 @@ def sembrar_personal() -> int:
     # siempre por los dos lados. Una pareja escrita en un solo sentido es una
     # pareja que el motor ve desde una punta y no desde la otra.
     for uno, otro in parejas:
-        a, b = personal.por_nombre(uno), personal.por_nombre(otro)
+        a = personal.por_origen_siembra(uno) or personal.por_nombre(uno)
+        b = personal.por_origen_siembra(otro) or personal.por_nombre(otro)
         if a and b and a.get('pareja_id') != b['id']:
             personal.emparejar(a['id'], b['id'])
     return creadas

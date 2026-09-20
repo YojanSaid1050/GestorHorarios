@@ -33,10 +33,10 @@ from typing import Optional
 
 from gestor.datos import ajustes as datos_ajustes
 from gestor.datos import horarios, novedades, personal
-from gestor.datos.base import abierta
 from gestor.dominio import calendario, cobertura
+from gestor.motor.decisiones import NO_SE_PISAN_NI_FORZANDO
 from gestor.registro import obtener
-from gestor.servicios import continuidad, periodos
+from gestor.servicios import cierres, continuidad, periodos
 
 #: Cuántas alternativas se ofrecen y cuántas variantes se prueban para lograrlas.
 ALTERNATIVAS = 5
@@ -70,28 +70,26 @@ class Peticion:
 
 # ------------------------------------------------------------- el recorte
 
-def _semanas_cerradas(anio: int, mes: int) -> set[str]:
-    with abierta() as conexion:
-        return {str(f['lunes']) for f in conexion.execute(
-            'SELECT lunes FROM semanas WHERE anio=? AND mes=? AND cerrada=1',
-            (int(anio), int(mes)))}
-
-
-def _fechas_de(lunes: str) -> set[str]:
-    inicio = date.fromisoformat(str(lunes)[:10])
-    return {(inicio + timedelta(days=i)).isoformat() for i in range(7)}
-
-
 def _rango_editable(peticion: Peticion) -> set[str]:
     """Las fechas que el motor puede tocar. Todo lo demás se congela.
 
     Una semana cerrada nunca entra, aunque caiga dentro del rango elegido: es lo
     que significa cerrarla, y confiar en que el usuario no la seleccione sería
     poner la protección en el sitio equivocado.
+
+    Con «solo este día» entra **la semana entera de esa fecha**, y es a
+    propósito aunque sorprenda. El turno se decide por semanas y el descanso
+    semanal es uno: poner AM en el día libre de alguien obliga a mover ese
+    descanso a otro día de la misma semana, y sin esos seis días el cambio
+    sencillamente no cabría y se rechazaría sin poder explicar por qué. Lo que
+    se estrecha es **quién** se mueve: solo esa persona (ver
+    `_quien_se_puede_mover`). Los días de su semana que acaben cambiando se
+    devuelven uno a uno en `cambios_automaticos` del diagnóstico, porque es la
+    pregunta inmediata: «vale, ¿y qué más ha cambiado por esto?».
     """
     semanas = calendario.semanas(peticion.mes, peticion.anio)
     lunes_del_mes = [inicio.isoformat() for inicio, _ in semanas]
-    cerradas = _semanas_cerradas(peticion.anio, peticion.mes)
+    cerradas = cierres.semanas_cerradas(peticion.anio, peticion.mes)
 
     if peticion.solo_este_dia and peticion.ajustes_manuales:
         fecha = str(peticion.ajustes_manuales[0]['fecha'])[:10]
@@ -108,7 +106,7 @@ def _rango_editable(peticion: Peticion) -> set[str]:
     for lunes in elegidos:
         if lunes in cerradas:
             continue
-        editables.update(_fechas_de(lunes))
+        editables.update(cierres.fechas_de(lunes))
     return editables
 
 
@@ -158,7 +156,17 @@ def _congelar(base: dict, editables: set[str], movibles: set[int]) -> list[dict]
 
 # ------------------------------------------------------ los cambios a mano
 
-def _validar_manuales(peticion: Peticion, base: dict) -> list[dict]:
+def _validar_manuales(peticion: Peticion, base: dict,
+                      editables: set[str]) -> list[dict]:
+    """Los cambios pedidos a mano, o el motivo por el que no se pueden pedir.
+
+    `editables` no es decoración. Los manuales se le entregan al motor
+    **después** de las casillas congeladas, así que uno que cayera fuera del
+    rango —o dentro de una semana cerrada— pisaba lo congelado y salía aplicado.
+    Cerrar una semana dejaba de significar nada en cuanto alguien marcaba la
+    casilla de forzar: por ahí se podía cambiar un día que la oficina ya tenía
+    impreso.
+    """
     heredados = {
         (int(f.get('empleado_id') or 0), str(d.get('fecha')))
         for f in base.get('horario') or [] for d in f.get('dias') or []
@@ -178,6 +186,14 @@ def _validar_manuales(peticion: Peticion, base: dict) -> list[dict]:
             raise NoSePudoReprogramar(
                 f'El {fecha} pertenece a un mes ya publicado y no se puede cambiar '
                 'desde aquí. Cámbialo en ese mes y este volverá a leerlo.')
+        if fecha not in editables:
+            cerrada = fecha in cierres.fechas_cerradas(peticion.anio, peticion.mes)
+            raise NoSePudoReprogramar(
+                f'El {fecha} está en una semana cerrada y no se puede cambiar. '
+                'Ábrela primero si de verdad hay que tocarla, y quedará registrado.'
+                if cerrada else
+                f'El {fecha} queda fuera de las semanas que has elegido. Amplía la '
+                'selección hasta esa fecha o quita el cambio.')
         limpios.append({
             'empleado_id': empleado_id, 'fecha': fecha, 'turno': turno,
             'forzar_total': bool(peticion.permitir_excepciones_manuales),
@@ -223,6 +239,15 @@ def _diagnostico(resultado: dict, base: dict, manuales: list[dict],
                 'Quedó puesto como excepción autorizada, con el motivo registrado.')
         elif puesto:
             estado, mensaje = 'aplicado', 'Quedó puesto sin saltarse ninguna regla.'
+        elif despues.get('turno') in NO_SE_PISAN_NI_FORZANDO:
+            # Aquí no hay nada que autorizar desde esta pantalla, y decir
+            # «autoriza la excepción» mandaría a marcar una casilla que no va a
+            # servir. Lo que hay que cambiar está en otro sitio.
+            estado, mensaje = 'no_aplicado', (
+                f'Ese día tiene {despues.get("turno")} por una novedad aprobada. '
+                'Forzar no lo cambia: el horario refleja esa decisión, no la '
+                'toma. Si ya no vale, rectifícala en Solicitudes y el horario la '
+                'seguirá.')
         else:
             estado, mensaje = 'no_aplicado', (
                 f'No se pudo poner {item["turno"]}: quedó {despues.get("turno")}. '
@@ -294,7 +319,8 @@ def reprogramar(peticion: Peticion) -> dict:
     from gestor.motor.orquestacion import generar_horario_completo
 
     base = _base(peticion)
-    plantilla = personal.listar()
+    inicio, fin = calendario.rango(int(peticion.mes), int(peticion.anio))
+    plantilla = personal.para_periodo(inicio.isoformat(), fin.isoformat())
     if not plantilla:
         raise NoSePudoReprogramar('No hay nadie en la plantilla.')
     nombres = {int(p['id']): p['nombre'] for p in plantilla}
@@ -311,7 +337,7 @@ def reprogramar(peticion: Peticion) -> dict:
             'No queda ninguna semana editable en la selección: las que has elegido '
             'están cerradas. Ábrelas primero si de verdad quieres cambiarlas.')
 
-    manuales = _validar_manuales(peticion, base)
+    manuales = _validar_manuales(peticion, base, editables)
     movibles = _quien_se_puede_mover(peticion, plantilla)
     congelados = _congelar(base, editables, movibles)
 
@@ -324,6 +350,13 @@ def reprogramar(peticion: Peticion) -> dict:
     solicitudes = novedades.solicitudes_para_el_motor(peticion.mes, peticion.anio)
     asignaciones = novedades.asignaciones_para_el_motor(peticion.mes, peticion.anio)
     contexto = continuidad.todo(peticion.mes, peticion.anio)
+    # Igual que al generar el mes entero: lo que estas alternativas incorporan
+    # queda escrito con ellas, y es lo único que se dará por resuelto si se
+    # elige una. Con las áreas pedidas, solo los avisos de esas áreas.
+    avisos = ([a for area in peticion.areas
+               for a in periodos.pendientes(peticion.mes, peticion.anio, area=area)]
+              if peticion.areas else
+              periodos.pendientes(peticion.mes, peticion.anio))
 
     vistas, alternativas = set(), []
     for variante in range(VARIANTES):
@@ -352,6 +385,7 @@ def reprogramar(peticion: Peticion) -> dict:
             'permitir_excepciones_manuales': peticion.permitir_excepciones_manuales,
             'motivo_excepcion_manual': peticion.motivo_excepcion_manual,
         }
+        resultado['avisos_incorporados'] = list(avisos)
         alternativas.append(resultado)
 
     if not alternativas:
@@ -377,7 +411,10 @@ def reprogramar(peticion: Peticion) -> dict:
                 justificacion=peticion.motivo_excepcion_manual,
                 reglas=alternativas[0].get('excepciones_manuales') or [])
 
-    periodos.limpiar(peticion.mes, peticion.anio)
+    # Tampoco aquí se quita el aviso: esto son alternativas para comparar, no el
+    # horario del mes. Y se quitaba entero, sin área, así que reprogramar
+    # Gestión Social borraba también el pendiente de Comunicaciones. Se quita al
+    # elegir una, y solo para las áreas que esa propuesta rehizo de verdad.
     return {
         'alternativas': alternativas,
         'grupo_id': grupo,

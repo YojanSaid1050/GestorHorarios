@@ -27,7 +27,7 @@ from pydantic import BaseModel
 
 from gestor.datos import novedades, personal
 from gestor.dominio import calendario
-from gestor.servicios import historial, periodos
+from gestor.servicios import cierres, exclusion, historial, periodos
 
 router = APIRouter(prefix='/api', tags=['novedades'])
 
@@ -45,6 +45,10 @@ class SolicitudNueva(BaseModel):
     intercambio_empleado_id: Optional[int] = None
     turno_solicitado: Optional[str] = None
     dia_descanso_solicitado: Optional[int] = None
+    #: Las horas de una capacitación. La pantalla las manda desde siempre; sin
+    #: declararlas aquí, Pydantic las tiraba sin decir nada.
+    hora_inicio: Optional[str] = None
+    hora_fin: Optional[str] = None
     observacion: str = ''
     #: La casilla «Aprobada por el jefe» del formulario.
     #:
@@ -167,7 +171,14 @@ def crear_solicitud(solicitud: SolicitudNueva):
     nombre = _nombre(datos['empleado_id'])
     ya_aprobada = bool(datos.pop('aprobada', False))
     datos['estado'] = 'aprobada' if ya_aprobada else 'pendiente'
-    identificador = novedades.crear_solicitud(datos)
+    with exclusion.decidiendo():
+        if ya_aprobada:
+            # Nace aprobada: manda sobre el horario desde este momento, igual
+            # que si alguien le hubiera dado a «aprobar». Se comprueba antes de
+            # escribir, y las dos cosas juntas: entre mirar y escribir cabía
+            # otra petición haciendo exactamente lo mismo.
+            _exigir_que_no_choque({**datos, 'empleado_nombre': nombre})
+        identificador = novedades.crear_solicitud(datos)
     historial.anotar('crear_solicitud', 'solicitud',
                      {'id': identificador, 'nombre': nombre, 'tipo': datos['tipo'],
                       'estado': datos['estado']})
@@ -185,7 +196,15 @@ def crear_solicitud(solicitud: SolicitudNueva):
 @router.put('/solicitudes/{solicitud_id}')
 def editar_solicitud(solicitud_id: int, solicitud: SolicitudNueva):
     antes = _buscar_solicitud(solicitud_id)
-    novedades.actualizar_solicitud(solicitud_id, solicitud.model_dump())
+    nuevos = solicitud.model_dump()
+    with exclusion.decidiendo():
+        if antes['estado'] == 'aprobada':
+            # Corregir las fechas o la persona de algo aprobado es aprobarlo
+            # otra vez, en otro sitio. `actualizar_solicitud` no toca la
+            # columna `estado`, así que una aprobada se movía encima de otra
+            # aprobada sin que nadie volviera a mirar.
+            _exigir_que_no_choque({**antes, **nuevos}, excluir=solicitud_id)
+        novedades.actualizar_solicitud(solicitud_id, nuevos)
     historial.anotar('editar_solicitud', 'solicitud', {'id': solicitud_id})
     aviso = ''
     if antes['estado'] == 'aprobada':
@@ -193,36 +212,79 @@ def editar_solicitud(solicitud_id: int, solicitud: SolicitudNueva):
         # estaba y donde pasa a estar.
         aviso = _avisar_de_la_solicitud(antes, 'se corrigió una novedad aprobada')
         aviso += _avisar_de_la_solicitud(
-            {**antes, **solicitud.model_dump()}, 'se corrigió una novedad aprobada')
+            {**antes, **nuevos}, 'se corrigió una novedad aprobada')
     return {'ok': True, 'mensaje': 'Solicitud corregida.' + aviso}
+
+
+def _conflictos(solicitud: dict, excluir: Optional[int] = None) -> list[dict]:
+    """Con qué choca esa novedad, mire quien la mire.
+
+    Está separado de la ruta a propósito. La comprobación vivía dentro de
+    `prevalidar`, que recibe el identificador de algo **ya guardado**, así que
+    los dos caminos por los que una novedad nace o se vuelve aprobada sin pasar
+    por «aprobar» se la saltaban enteros: marcar la casilla «ya aprobada» al
+    crearla, y corregir las fechas de una que ya lo estaba. Por ahí entraban
+    exactamente los choques que el control existe para impedir.
+    """
+    nombre = solicitud.get('empleado_nombre') or _nombre(solicitud['empleado_id'])
+    inicio = solicitud['fecha_inicio']
+    fin = solicitud.get('fecha_fin') or inicio
+    conflictos = [{
+        'codigo': 'NOVEDAD_SOLAPADA',
+        'fecha': c['fecha_del_choque'],
+        'empleado_id': solicitud['empleado_id'],
+        'mensaje': (f'{nombre} ya tiene aprobado {c["tipo"]} el '
+                    f'{c["fecha_del_choque"]}. Cancela una de las dos antes de '
+                    'aprobar esta.'),
+    } for c in novedades.solapadas(
+        solicitud['empleado_id'], inicio, fin, excluir=excluir,
+        patron=solicitud)]
+
+    # El descanso semanal es uno, así que moverlo dos veces en la misma semana
+    # son dos órdenes contrarias. No se solapan por fecha —el 14 y el 15 son
+    # días distintos— así que la comprobación de arriba no las ve nunca.
+    if solicitud['tipo'] == 'descanso':
+        for otra in novedades.descansos_movidos_de_la_semana(
+                solicitud['empleado_id'], inicio, fin, excluir=excluir):
+            conflictos.append({
+                'codigo': 'DOS_DESCANSOS_LA_MISMA_SEMANA',
+                'fecha': otra['fecha_inicio'],
+                'empleado_id': solicitud['empleado_id'],
+                'mensaje': (
+                    f'{nombre} ya tiene aprobado mover su '
+                    f'descanso al {otra["fecha_inicio"]}, que cae en la misma '
+                    'semana. El descanso semanal es uno solo: cancela esa '
+                    'primera solicitud si ahora prefiere este otro día.'),
+            })
+    return conflictos
+
+
+def _exigir_que_no_choque(solicitud: dict, excluir: Optional[int] = None) -> None:
+    """Se niega a dejar aprobada una novedad que contradice a otra.
+
+    Aprobar dos cosas distintas para el mismo día no es algo que la aplicación
+    pueda resolver sola: el motor acaba obedeciendo a una y el horario
+    contradice a la otra, que sigue aprobada en su pantalla.
+    """
+    choques = _conflictos(solicitud, excluir=excluir)
+    if choques:
+        raise ValueError(choques[0]['mensaje'])
 
 
 @router.get('/solicitudes/{solicitud_id}/prevalidar')
 def prevalidar(solicitud_id: int):
     """¿Chocaría con algo ya aprobado? Se pregunta antes de aprobar."""
-    solicitud = _buscar_solicitud(solicitud_id)
-    choques = novedades.solapadas(
-        solicitud['empleado_id'], solicitud['fecha_inicio'], solicitud['fecha_fin'],
-        excluir=solicitud_id)
-    conflictos = [{
-        'codigo': 'NOVEDAD_SOLAPADA',
-        'fecha': c['fecha_inicio'],
-        'empleado_id': solicitud['empleado_id'],
-        'mensaje': (f'{solicitud["empleado_nombre"]} ya tiene aprobado {c["tipo"]} '
-                    f'del {c["fecha_inicio"]} al {c["fecha_fin"]}. Cancela una de las '
-                    'dos antes de aprobar esta.'),
-    } for c in choques]
+    conflictos = _conflictos(_buscar_solicitud(solicitud_id), excluir=solicitud_id)
     return {'ok': True, 'compatible': not conflictos, 'conflictos': conflictos,
             'avisos': [c['mensaje'] for c in conflictos]}
 
 
 @router.patch('/solicitudes/{solicitud_id}/aprobar')
 def aprobar(solicitud_id: int):
-    previo = prevalidar(solicitud_id)
-    if not previo['compatible']:
-        raise ValueError(previo['avisos'][0])
-    solicitud = _buscar_solicitud(solicitud_id)
-    novedades.resolver_solicitud(solicitud_id, 'aprobada')
+    with exclusion.decidiendo():
+        solicitud = _buscar_solicitud(solicitud_id)
+        _exigir_que_no_choque(solicitud, excluir=solicitud_id)
+        novedades.resolver_solicitud(solicitud_id, 'aprobada')
     historial.anotar('aprobar_solicitud', 'solicitud', {'id': solicitud_id})
     aviso = _avisar_de_la_solicitud(solicitud, 'se aprobó una novedad')
     return {'ok': True, 'mensaje': (
@@ -300,18 +362,95 @@ def borrar_asignaciones_cumplidas():
             'mensaje': f'Se eliminaron {len(ids)} asignación(es) ya cumplida(s).'}
 
 
-@router.post('/requerimientos/prevalidar')
-def prevalidar_asignacion(asignacion: AsignacionNueva):
-    datos = asignacion.model_dump()
+def _fechas_que_ocupa(datos: dict) -> list[str]:
+    """Los días que esa asignación va a ocupar de verdad.
+
+    Con fechas sueltas son esas. Si se repite cada semana, son los días que
+    caen dentro de los meses que ya tienen horario: mirar solo la lista de
+    fechas dejaba a las recurrentes sin un solo conflicto posible —no tienen
+    fechas— y por ahí entraban enteras sin que nadie las comparara con nada.
+    """
+    sueltas = [str(f)[:10] for f in (datos.get('fechas') or [])]
+    if not (datos.get('recurrente_indefinido') and datos.get('dias_semana')):
+        return sueltas
+    from datetime import timedelta
+
+    from gestor.datos import horarios as datos_horarios
+    dias = {int(d) for d in datos['dias_semana']}
+    desde = str(datos.get('vigente_desde') or '')[:10]
+    salida = set(sueltas)
+    for anio, mes in datos_horarios.meses_con_horario():
+        inicio, fin = calendario.rango(int(mes), int(anio))
+        fecha = inicio
+        while fecha <= fin:
+            if fecha.weekday() in dias and fecha.isoformat() >= (desde or fecha.isoformat()):
+                salida.add(fecha.isoformat())
+            fecha += timedelta(days=1)
+    return sorted(salida)
+
+
+def _conflictos_de_asignacion(datos: dict) -> list[dict]:
+    """Con qué choca esa asignación, mirando las cuatro cosas que la pisan.
+
+    La vista previa comparaba **solo** contra novedades aprobadas, y solo en
+    las fechas escritas a mano. No veía otra asignación de la misma persona el
+    mismo día, ni las semanas cerradas, ni nada de lo que produce una
+    recurrencia. Y, lo que era peor, guardar no la llamaba: lo que la pantalla
+    acababa de marcar en rojo se guardaba igual pulsando el botón de al lado.
+    """
+    empleado_id = int(datos['empleado_id'])
+    fechas = _fechas_que_ocupa(datos)
     conflictos = []
-    for fecha in datos.get('fechas') or []:
-        choques = novedades.solapadas(datos['empleado_id'], fecha, fecha)
+
+    for fecha in fechas:
+        choques = novedades.solapadas(empleado_id, fecha, fecha)
         if choques:
             conflictos.append({
                 'codigo': 'NOVEDAD_SOLAPADA', 'fecha': fecha,
-                'empleado_id': datos['empleado_id'],
+                'empleado_id': empleado_id,
                 'mensaje': (f'El {fecha} esa persona ya tiene aprobada otra novedad '
                             f'({choques[0]["tipo"]}).')})
+
+    # Otra asignación de la misma persona el mismo día. Dos instrucciones para
+    # el mismo turno son una y su contraria, y el motor acaba obedeciendo a la
+    # que se aplique después.
+    propias = {}
+    for otra in novedades.listar_asignaciones():
+        if (int(otra['empleado_id']) != empleado_id
+                or str(otra.get('estado') or 'activo') != 'activo'
+                or int(otra['id']) == int(datos.get('id') or 0)):
+            continue
+        for fecha in _fechas_que_ocupa(otra):
+            propias.setdefault(fecha, otra)
+    for fecha in fechas:
+        otra = propias.get(fecha)
+        if otra is not None:
+            conflictos.append({
+                'codigo': 'ASIGNACION_SOLAPADA', 'fecha': fecha,
+                'empleado_id': empleado_id,
+                'mensaje': (f'El {fecha} esa persona ya tiene otra asignación '
+                            f'({otra["tipo"]}). Quita una de las dos.')})
+
+    # Y las semanas cerradas, que es lo que significa cerrarlas.
+    from datetime import date as _date
+    for fecha in fechas:
+        # Los periodos se solapan, así que una fecha puede pertenecer a dos: se
+        # miran los dos, porque cerrarla en cualquiera de ellos la cierra.
+        for anio, mes in calendario.periodos_de_la_fecha(_date.fromisoformat(fecha)):
+            if fecha in cierres.fechas_cerradas(anio, mes):
+                conflictos.append({
+                    'codigo': 'SEMANA_CERRADA', 'fecha': fecha,
+                    'empleado_id': empleado_id,
+                    'mensaje': (f'El {fecha} está en una semana cerrada. Ábrela '
+                                'primero si de verdad hay que tocarla.')})
+                break
+    return conflictos
+
+
+@router.post('/requerimientos/prevalidar')
+def prevalidar_asignacion(asignacion: AsignacionNueva):
+    datos = asignacion.model_dump()
+    conflictos = _conflictos_de_asignacion(datos)
     return {'ok': True, 'tiene_conflictos': bool(conflictos), 'conflictos': conflictos,
             'compatible': not conflictos, 'avisos': [c['mensaje'] for c in conflictos],
             'fechas_libres': [f for f in (datos.get('fechas') or [])
@@ -341,7 +480,14 @@ def crear_asignacion(asignacion: AsignacionNueva):
     if not datos['fechas'] and not datos['recurrente_indefinido']:
         raise ValueError('Elige al menos una fecha, o marca que se repite cada semana.')
     ficha = _ficha(datos['empleado_id'])
-    identificador = novedades.crear_asignacion(datos)
+    # Lo que la vista previa marca en rojo no se puede guardar pulsando el botón
+    # de al lado. Guardar no llamaba a la comprobación, así que la vista previa
+    # era un consejo y no un control.
+    with exclusion.decidiendo():
+        choques = _conflictos_de_asignacion(datos)
+        if choques:
+            raise ValueError(choques[0]['mensaje'])
+        identificador = novedades.crear_asignacion(datos)
     historial.anotar('crear_asignacion', 'asignacion',
                      {'id': identificador, 'nombre': ficha['nombre'], 'tipo': datos['tipo']})
     aviso = _avisar_de_la_asignacion(datos, ficha['area'], 'se añadió una asignación')
@@ -362,7 +508,13 @@ def crear_asignacion_masiva(peticion: AsignacionMasiva):
     etiqueta = (f'Área {AREAS_BONITAS.get(str(peticion.area), peticion.area)}'
                 if peticion.alcance == 'area' else 'Todo el personal')
 
-    creadas, omitidos, areas = [], [], set()
+    # Primero se mira a todo el mundo y solo después se escribe, todo de una
+    # vez. Antes se guardaba persona a persona dentro del bucle, cada una con su
+    # transacción, y la comprobación de que esa persona existe estaba **dentro**:
+    # si la cuarta ya no estaba en la plantilla, las tres primeras se quedaban
+    # guardadas y la respuesta era un error. Quien lo leía no tenía forma de
+    # saber que tres personas sí la tenían puesta, ni cuáles.
+    por_guardar, omitidos, areas = [], [], set()
     for empleado_id in peticion.empleado_ids:
         datos = {**peticion.requerimiento.model_dump(), 'empleado_id': int(empleado_id),
                  'grupo_id': grupo, 'grupo_alcance': peticion.alcance,
@@ -378,8 +530,9 @@ def crear_asignacion_masiva(peticion: AsignacionMasiva):
                 continue
         ficha = _ficha(int(empleado_id))
         areas.add(ficha['area'])
-        creadas.append(novedades.crear_asignacion(datos))
+        por_guardar.append(datos)
 
+    creadas = novedades.crear_asignaciones(por_guardar)
     if not creadas:
         raise ValueError(
             'No se pudo guardar para nadie: todas las personas del grupo tienen ya '
@@ -399,6 +552,22 @@ def crear_asignacion_masiva(peticion: AsignacionMasiva):
             'conflictos_grupo_aceptados': [], 'mensaje': resumen + aviso}
 
 
+def _avisar_del_grupo(afectadas: list[dict], motivo: str) -> str:
+    """Marca **todas** las áreas del grupo, no solo la de la primera fila.
+
+    Estaba escrito `afectadas[:1]`: se cancelaba el grupo entero —las tres
+    áreas— y solo se marcaba como desactualizada la del primero de la lista.
+    Las demás se quedaban con un horario que ya no se corresponde con lo que
+    hay aprobado y sin nada que lo dijera. Las filas de un grupo comparten
+    fechas, así que basta con una por área.
+    """
+    primeras: dict[str, dict] = {}
+    for fila in afectadas:
+        primeras.setdefault(str(fila.get('area') or ''), fila)
+    return ''.join(_avisar_de_la_asignacion(fila, area, motivo)
+                   for area, fila in sorted(primeras.items()) if area)
+
+
 @router.patch('/requerimientos/grupo/{grupo_id}/cancelar')
 def cancelar_grupo(grupo_id: str):
     afectadas = [a for a in novedades.listar_asignaciones() if a.get('grupo_id') == grupo_id]
@@ -407,8 +576,7 @@ def cancelar_grupo(grupo_id: str):
     cuantas = novedades.cancelar_grupo(grupo_id)
     historial.anotar('cancelar_grupo_asignacion', 'asignacion',
                      {'grupo_id': grupo_id, 'canceladas': cuantas})
-    aviso = ''.join(_avisar_de_la_asignacion(a, a['area'], 'se canceló una asignación masiva')
-                    for a in afectadas[:1])
+    aviso = _avisar_del_grupo(afectadas, 'se canceló una asignación masiva')
     return {'ok': True, 'canceladas': cuantas, 'mensaje': (
         f'Se canceló la asignación de {cuantas} persona(s). Queda en el historial.' + aviso)}
 
@@ -418,8 +586,7 @@ def borrar_grupo(grupo_id: str):
     afectadas = [a for a in novedades.listar_asignaciones() if a.get('grupo_id') == grupo_id]
     if not afectadas:
         raise ValueError('Ese grupo ya no existe.')
-    aviso = ''.join(_avisar_de_la_asignacion(a, a['area'], 'se eliminó una asignación masiva')
-                    for a in afectadas[:1])
+    aviso = _avisar_del_grupo(afectadas, 'se eliminó una asignación masiva')
     cuantas = novedades.borrar_grupo(grupo_id)
     historial.anotar('borrar_grupo_asignacion', 'asignacion',
                      {'grupo_id': grupo_id, 'eliminadas': cuantas})

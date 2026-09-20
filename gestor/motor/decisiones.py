@@ -49,10 +49,37 @@ def _fechas_turno_dia(s: dict) -> list[str]:
         fechas = [f for f in fechas if f.weekday() == int(weekday)]
     return [f.isoformat() for f in fechas]
 
+#: Lo que dura una capacitación cuando nadie dijo de cuándo a cuándo. Es una
+#: jornada normal: si alguien pasa el día en un curso, ese día no está en su
+#: puesto, y para el horario eso es lo que importa.
+HORAS_DE_UNA_JORNADA = 7.0
+
+
 def _horas_cap(s: dict) -> float:
-    ini = datetime.strptime(s['hora_inicio'], '%H:%M')
-    fin = datetime.strptime(s['hora_fin'], '%H:%M')
-    return (fin - ini).total_seconds() / 3600
+    """Cuántas horas dura la capacitación. Sin horas, una jornada.
+
+    Esto reventaba, y se llevaba el mes entero por delante. `strptime(None)`
+    lanza, la excepción subía hasta `generacion.generar`, que la apunta en el
+    registro y sigue con la variante siguiente... donde vuelve a pasar lo mismo.
+    Las cinco variantes fallaban igual, no quedaba ni una propuesta, y la
+    persona leía «puede que se contradigan entre ellas» sobre **una sola**
+    solicitud. A partir de ahí octubre no se podía generar hasta cancelarla.
+
+    Y pasaba siempre: la pantalla manda `hora_inicio` y `hora_fin`, pero el
+    modelo de la ruta no las declaraba y la tabla no tenía dónde guardarlas, así
+    que a este punto no llegaban nunca. Una capacitación pedida desde la
+    aplicación no podía tener horas.
+    """
+    ini, fin = s.get('hora_inicio'), s.get('hora_fin')
+    if not ini or not fin:
+        return HORAS_DE_UNA_JORNADA
+    try:
+        desde = datetime.strptime(str(ini), '%H:%M')
+        hasta = datetime.strptime(str(fin), '%H:%M')
+    except (TypeError, ValueError):
+        return HORAS_DE_UNA_JORNADA
+    horas = (hasta - desde).total_seconds() / 3600
+    return horas if horas > 0 else HORAS_DE_UNA_JORNADA
 
 def reubicar_descanso_retirado_manualmente(
     horario: list[dict],
@@ -137,7 +164,22 @@ def aplicar_solicitudes_previas(
                 continue
             # Un día heredado ya se decidió y se publicó con el mes anterior:
             # ninguna novedad ni asignación de este periodo lo reescribe.
+            #
+            # **Pero se dice.** Antes esto era un `continue` a secas y ahí se
+            # acababa: la novedad salía aprobada en su tabla, el día salía
+            # trabajado en el horario, y no había una sola línea en ninguna
+            # parte que explicara por qué. Quien la pidió daba por hecho que
+            # estaba puesta. Como los períodos van por semanas completas, la
+            # primera semana de un mes es siempre la última del anterior, así
+            # que esto le toca a cualquier novedad de los primeros días.
             if d.get('heredado'):
+                if advertencias is not None:
+                    advertencias.append(
+                        f"{e['nombre']}: la solicitud {tipo} del {f.isoformat()} "
+                        'no se aplicó aquí. Ese día pertenece a la semana que '
+                        'este mes comparte con el anterior, que ya se entregó y '
+                        'se copia tal cual. Para cambiarlo hay que rehacer el '
+                        'mes anterior desde Modificar horario.')
                 continue
             if not d.get('vigente', True) or d.get('turno') == OUT_OF_VIGENCY_CODE:
                 # Una novedad histórica posterior al retiro no reactiva a la persona.
@@ -772,6 +814,13 @@ def reubicar_descanso_fijo_por_actividad(horario: list[dict]) -> list[str]:
             )
     return errores
 
+#: Lo que un cambio a mano no puede tocar, ni siquiera con la casilla de forzar
+#: marcada. No son turnos: son decisiones aprobadas en otra pantalla, y el
+#: horario las refleja, no las decide. `NV` no está porque no es una ausencia
+#: —es que esa persona ese día no estaba en la plantilla— y se descarta antes.
+NO_SE_PISAN_NI_FORZANDO = frozenset({'VAC', 'INC', 'PER', 'CAP'})
+
+
 def aplicar_ajustes_manuales(
     horario: list[dict],
     ajustes: Optional[list[dict]] = None,
@@ -825,6 +874,25 @@ def aplicar_ajustes_manuales(
 
         if turno not in {'AM', 'PM', 'D', 'ADM-GS', 'ADM-AC'}:
             errores.append(f"{e['nombre']}: el ajuste manual del {fecha} debe ser AM, PM, D, ADM-GS o ADM-AC.")
+            continue
+        # Una ausencia aprobada no se quita poniendo otra cosa encima.
+        #
+        # Estos cuatro códigos no los pone el reparto: los pone una novedad que
+        # alguien aprobó, con su fecha y su motivo. Forzar por encima dejaba a
+        # la persona trabajando un día en el que seguía teniendo la incapacidad
+        # aprobada —el horario decía AM y la novedad decía INC— y además borraba
+        # el `solicitud_id`, que era lo único que ataba la casilla a la decisión.
+        #
+        # Forzar sirve para saltarse una **regla del reparto**: la cobertura, el
+        # descanso, la pareja. No para deshacer una decisión que se tomó en otra
+        # pantalla. Si la incapacidad ya no vale, se rectifica la novedad, que es
+        # donde queda constancia de quién lo autorizó.
+        if d.get('turno') in NO_SE_PISAN_NI_FORZANDO:
+            errores.append(
+                f"{e['nombre']}: el {fecha} tiene {d.get('turno')} por una novedad "
+                f"aprobada y no se puede cambiar a {turno} desde el horario, ni "
+                "forzando. Rectifica la novedad en Solicitudes y el horario la "
+                "seguirá.")
             continue
         if not forzar_total:
             if turno == 'ADM-AC':

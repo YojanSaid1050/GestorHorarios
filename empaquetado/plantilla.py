@@ -135,11 +135,42 @@ def aplicar(destino: Path, texto: str = '') -> bool:
     return True
 
 
+def desempaquetar(texto: str = '', destino: Path = REAL) -> Path:
+    """La operación contraria: de la línea en base64, otra vez a `nomina/`.
+
+    Hace falta cuando se cambia de equipo o se pierde la carpeta. El secreto de
+    GitHub **no se puede volver a leer** una vez guardado —eso es lo que lo hace
+    un secreto—, así que la línea tiene que venir de donde se guardara: la
+    variable de entorno, o pegada por la entrada estándar.
+
+    Escribe en `nomina/`, que está en `.gitignore`. Nunca en `datos_iniciales/`,
+    que sí está en git: esa confusión es de las que no se deshacen.
+    """
+    texto = (texto or os.environ.get(VARIABLE, '')).strip()
+    if not texto and not sys.stdin.isatty():
+        texto = sys.stdin.read().strip()
+    if not texto:
+        raise SystemExit(
+            f'No hay nada que desempaquetar. Pon la línea en {VARIABLE} o pégala '
+            f'por la entrada: python empaquetado/plantilla.py --desempaquetar < linea.txt')
+    destino.mkdir(parents=True, exist_ok=True)
+    aplicar(destino, texto)
+    return destino
+
+
 def main() -> int:
     partes = argparse.ArgumentParser(description=__doc__)
     partes.add_argument('--empaquetar', action='store_true',
                         help='escribir la plantilla real como una línea en base64')
+    partes.add_argument('--desempaquetar', action='store_true',
+                        help=f'reconstruir {REAL.name}/ desde esa línea')
     opciones = partes.parse_args()
+    if opciones.desempaquetar:
+        carpeta = desempaquetar()
+        print(f'Plantilla real escrita en {carpeta}', file=sys.stderr)
+        print('Esa carpeta está en .gitignore. No la copies a datos_iniciales/.',
+              file=sys.stderr)
+        return 0
     if not opciones.empaquetar:
         partes.print_help()
         return 1

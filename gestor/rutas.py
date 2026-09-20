@@ -75,14 +75,43 @@ def preparar() -> None:
         carpeta.mkdir(parents=True, exist_ok=True)
 
 
+#: Una carpeta con la plantilla de verdad, para arrancar el programa con ella
+#: sin haberlo empaquetado. Se pone en la variable de entorno `GESTOR_PLANTILLA`
+#: y apunta a la carpeta que contiene `datos_iniciales/`.
+#:
+#: Existe por una razón concreta y vale la pena escribirla: la otra forma de
+#: probar con los datos reales es copiar `nomina/datos_iniciales/*` encima de
+#: `datos_iniciales/`, y **eso es exactamente cómo se publica una plantilla sin
+#: querer**. Esa carpeta sí está en git; la de la nómina no. Un `git add -A`
+#: después de la copia sube los dieciocho nombres al repositorio público, y una
+#: vez empujado, borrarlo no lo deshace.
+#:
+#: Así que hay una variable, no una copia. Sin ella el programa se comporta
+#: exactamente igual que siempre, que es lo que corre en la oficina y en las
+#: pruebas.
+PLANTILLA_PRIVADA = os.environ.get('GESTOR_PLANTILLA', '').strip()
+
+
 def dato_inicial(nombre: str) -> Path:
     """Un archivo de los que vienen dentro del programa.
 
-    Si falta, se admite una copia en la carpeta de datos del usuario. Así una
-    instalación a la que le falte un archivo se repara dejándolo ahí, en vez de
-    obligar a reinstalar; y si no está en ninguno de los dos sitios se devuelve
-    la ruta de siempre, para que el aviso hable del sitio que corresponde.
+    Se mira en tres sitios, por orden:
+
+    1. la carpeta privada de `GESTOR_PLANTILLA`, si está puesta. Es para probar
+       en el equipo de quien programa con la plantilla real, sin copiarla encima
+       de la inventada —que está en git— ni empaquetar nada;
+    2. lo que viene dentro del programa, que es el caso de siempre;
+    3. una copia en la carpeta de datos del usuario. Así una instalación a la
+       que le falte un archivo se repara dejándolo ahí, en vez de obligar a
+       reinstalar.
+
+    Si no está en ninguno de los tres se devuelve la ruta de siempre, para que
+    el aviso hable del sitio que corresponde.
     """
+    if PLANTILLA_PRIVADA:
+        privado = Path(PLANTILLA_PRIVADA).expanduser() / 'datos_iniciales' / nombre
+        if privado.exists():
+            return privado
     empaquetado = DATOS_INICIALES / nombre
     if empaquetado.exists():
         return empaquetado

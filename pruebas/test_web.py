@@ -152,10 +152,24 @@ def test_un_turno_fijo_sin_franja_se_rechaza_explicandolo(servidor, admin):
 
 
 def test_retirar_no_borra_y_lo_dice(servidor, admin):
-    quien = servidor.get('/api/empleados', headers=admin).json()[0]
+    """Retirarse no es desaparecer, y el día importa.
+
+    Esta prueba daba por bueno justo el fallo: retiraba con una fecha **futura**
+    y exigía que la persona se fuera de la plantilla en ese mismo instante. Así
+    era, y por eso el mes en curso se volvía a generar sin ella y sus turnos se
+    repartían entre los demás semanas antes de que se marchara.
+
+    Lo correcto son los dos casos: con la fecha aún por llegar sigue dentro, y
+    con la fecha cumplida ya no. En los dos, su rastro se conserva.
+    """
+    gente = servidor.get('/api/empleados', headers=admin).json()
+    # Sin pareja de PC: retirar a media pareja deshace el emparejamiento, y eso
+    # se comprueba en `pruebas/test_auditoria.py`, no aquí.
+    quien = next(p for p in gente if not p.get('pareja_id'))
+
     respuesta = servidor.post(f'/api/empleados/{quien["id"]}/retirar',
                               headers=admin,
-                              json={'fecha_retiro': '2026-11-01',
+                              json={'fecha_retiro': '2099-12-31',
                                     'motivo': 'renuncia'})
     assert respuesta.status_code == 200
     assert 'publicados' in respuesta.json()['mensaje']
@@ -163,7 +177,20 @@ def test_retirar_no_borra_y_lo_dice(servidor, admin):
     activos = {p['id'] for p in servidor.get('/api/empleados', headers=admin).json()}
     todos = {p['id'] for p in servidor.get(
         '/api/empleados?incluir_inactivos=true', headers=admin).json()}
-    assert quien['id'] not in activos and quien['id'] in todos
+    assert quien['id'] in activos, (
+        'se fue de la plantilla el día que se registró el retiro, no el día del '
+        'retiro: hasta esa fecha sigue trabajando y el horario la necesita')
+    assert quien['id'] in todos
+
+    # Y con la fecha ya cumplida, fuera.
+    otro = next(p for p in gente
+                if not p.get('pareja_id') and p['id'] != quien['id'])
+    servidor.post(f'/api/empleados/{otro["id"]}/retirar', headers=admin,
+                  json={'fecha_retiro': '2020-01-01', 'motivo': 'renuncia'})
+    activos = {p['id'] for p in servidor.get('/api/empleados', headers=admin).json()}
+    todos = {p['id'] for p in servidor.get(
+        '/api/empleados?incluir_inactivos=true', headers=admin).json()}
+    assert otro['id'] not in activos and otro['id'] in todos
 
 
 def test_un_formulario_incompleto_se_explica_en_castellano(servidor, admin):
