@@ -230,8 +230,29 @@ def autocomprobar() -> None:
     """
     ejecutable = SALIDA / nombre_del_ejecutable()
     print('\nComprobando el ejecutable recién construido…', flush=True)
-    resultado = subprocess.run([str(ejecutable), '--comprobar'], cwd=SALIDA,
-                               capture_output=True, text=True, timeout=300)
+    try:
+        resultado = subprocess.run([str(ejecutable), '--comprobar'], cwd=SALIDA,
+                                   capture_output=True, text=True, timeout=300)
+    except subprocess.TimeoutExpired as agotado:
+        # Lo que llevara dicho antes de colgarse, que es lo único que dice dónde.
+        #
+        # Con `capture_output` no se ve nada hasta que el proceso termina, así
+        # que un cuelgue dejaba en el registro de la publicación un `Traceback`
+        # de Python y ni una línea de la comprobación: ni por dónde iba, ni qué
+        # había pasado ya. La última línea que aparece aquí **es** la última que
+        # llegó a pasar.
+        def _texto(crudo) -> str:
+            if not crudo:
+                return ''
+            return crudo if isinstance(crudo, str) else crudo.decode('utf-8', 'replace')
+
+        print(_texto(agotado.stdout), end='')
+        print(_texto(agotado.stderr), end='', file=sys.stderr)
+        raise SystemExit(
+            f'\nLa comprobación del ejecutable no terminó en {agotado.timeout:.0f} '
+            'segundos y se ha parado. Lo de arriba es lo que llevaba dicho: la '
+            'última línea es lo último que llegó a pasar.\nNo se empaqueta: un '
+            'instalador que no abre es peor que ninguno.') from None
     print(resultado.stdout or '', end='')
     if resultado.returncode != 0:
         raise SystemExit(

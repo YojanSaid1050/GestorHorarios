@@ -35,6 +35,19 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+#: La contraseña con la que nace la cuenta de administrador, y la que se pone
+#: en su lugar durante la comprobación. Todo esto pasa en una carpeta de datos
+#: temporal que se borra al terminar: no es la instalación de nadie.
+CLAVE_DE_FABRICA = 'xYojanSaidx1050'
+CLAVE_DE_PRUEBA = 'ComprobacionDeLaInstalacion2026'
+
+#: Lo que se espera como mucho por cada pregunta. Eran sesenta segundos, y hay
+#: catorce preguntas: si varias se agotaban, la comprobación entera pasaba del
+#: tope de cinco minutos que pone el empaquetado y moría por tiempo en vez de
+#: contar qué le pasaba. Veinte segundos son de sobra para un servidor que
+#: contesta en milésimas, y dejan el total muy por debajo del tope.
+ESPERA = 20
+
 
 def _pedir(base: str, camino: str, metodo: str = 'GET', cuerpo=None, cabeceras=None):
     datos = json.dumps(cuerpo).encode() if cuerpo is not None else None
@@ -42,7 +55,7 @@ def _pedir(base: str, camino: str, metodo: str = 'GET', cuerpo=None, cabeceras=N
         f'{base}{camino}', data=datos, method=metodo,
         headers={'Content-Type': 'application/json', **(cabeceras or {})})
     try:
-        with urllib.request.urlopen(peticion, timeout=60) as respuesta:
+        with urllib.request.urlopen(peticion, timeout=ESPERA) as respuesta:
             return respuesta.status, json.loads(respuesta.read() or b'null')
     except urllib.error.HTTPError as fallo:
         try:
@@ -56,7 +69,7 @@ def _pedir(base: str, camino: str, metodo: str = 'GET', cuerpo=None, cabeceras=N
 def _paginar(base: str, camino: str) -> tuple[int, bytes]:
     """Pedir algo que no es JSON —la propia página— y devolverlo en bruto."""
     try:
-        with urllib.request.urlopen(f'{base}{camino}', timeout=60) as respuesta:
+        with urllib.request.urlopen(f'{base}{camino}', timeout=ESPERA) as respuesta:
             return respuesta.status, respuesta.read(400)
     except urllib.error.HTTPError as fallo:
         return fallo.code, b''
@@ -99,13 +112,23 @@ def comprobar() -> int:
         # probar esta comprobación sin construir un instalador.
         orden = ([sys.executable, '--servidor'] if getattr(sys, 'frozen', False)
                  else [sys.executable, '-m', 'gestor.principal', '--servidor'])
-        proceso = subprocess.Popen(orden, env=entorno, stdout=subprocess.PIPE,
-                                   stderr=subprocess.STDOUT, text=True)
+        # Lo que escriba el servidor va a un archivo, no a una tubería.
+        #
+        # Con `stdout=PIPE` y nadie leyéndola, el hijo se bloquea en cuanto la
+        # llena —unos pocos kilobytes— y se queda ahí para siempre: el servidor
+        # deja de contestar, cada pregunta agota su espera, y lo que se ve desde
+        # fuera es que la comprobación entera se cuelga sin decir una palabra.
+        # Con un archivo no hay tubería que llenar, y además queda escrito lo
+        # que dijo para poder leerlo si algo falla.
+        registro = carpeta / 'servidor.log'
+        with registro.open('w', encoding='utf-8', errors='replace') as salida_hijo:
+            proceso = subprocess.Popen(orden, env=entorno, stdout=salida_hijo,
+                                       stderr=subprocess.STDOUT, text=True)
         base = f'http://{HOST}:{puerto}'
-        arrancó = esperar_al_servidor(puerto, 60.0)
+        arrancó = esperar_al_servidor(puerto, 45.0)
         if not arrancó and proceso.poll() is not None:
-            salida = (proceso.stdout.read() if proceso.stdout else '')[-1500:]
-            acta.comprobar(False, 'el programa arranca', salida)
+            dicho = registro.read_text(encoding='utf-8', errors='replace')[-1500:]
+            acta.comprobar(False, 'el programa arranca', dicho)
             return 1
         acta.comprobar(arrancó, 'el programa arranca y responde')
         if not arrancó:
@@ -133,9 +156,46 @@ def comprobar() -> int:
                        'las cuentas de acceso están sembradas', str(cuentas)[:160])
 
         estado, sesion = _pedir(base, '/api/auth/login', 'POST',
-                                {'usuario': 'admin', 'password': 'xYojanSaidx1050'})
+                                {'usuario': 'admin', 'password': CLAVE_DE_FABRICA})
         entrado = estado == 200 and sesion.get('token')
         acta.comprobar(bool(entrado), 'se puede entrar', str(sesion)[:160])
+
+        # Y lo primero que tiene que pasar al entrar con la contraseña de
+        # fábrica es que el programa **no deje hacer nada más**.
+        #
+        # Esa contraseña viaja escrita dentro del instalador y la lee cualquiera
+        # que lo abra, así que mientras siga puesta el servidor contesta 403 a
+        # todo lo demás, incluido leer la plantilla. Comprobarlo aquí es lo que
+        # asegura que la protección viaja de verdad dentro del paquete y no solo
+        # en la batería de pruebas.
+        #
+        # Esta comprobación entraba con la contraseña de fábrica y seguía
+        # pidiendo datos como si nada: al poner el bloqueo, los 403 se leyeron
+        # como «falta la plantilla» y denunciaron un paquete que estaba perfecto.
+        if entrado:
+            acta.comprobar(sesion['usuario'].get('requiere_cambio_clave') is True,
+                           'la contraseña de fábrica llega marcada para cambiar')
+            estado, _ = _pedir(base, '/api/empleados',
+                               cabeceras={'X-Session-Token': sesion['token']})
+            acta.comprobar(estado == 403,
+                           'y con ella no se puede leer la plantilla',
+                           f'contestó {estado} en vez de 403')
+
+            # Se cambia, que es lo que hará quien instale, y a partir de aquí se
+            # comprueba el resto como una instalación ya puesta en marcha.
+            estado, _ = _pedir(base, '/api/auth/password', 'PUT',
+                               {'actual': CLAVE_DE_FABRICA, 'nueva': CLAVE_DE_PRUEBA},
+                               {'X-Session-Token': sesion['token']})
+            acta.comprobar(estado == 200, 'cambiarla desbloquea el programa',
+                           f'el cambio contestó {estado}')
+            # Cambiarla cierra todas las sesiones de esa cuenta, así que hay que
+            # volver a entrar con la nueva.
+            estado, sesion = _pedir(base, '/api/auth/login', 'POST',
+                                    {'usuario': 'admin', 'password': CLAVE_DE_PRUEBA})
+            entrado = estado == 200 and sesion.get('token')
+            acta.comprobar(bool(entrado), 'se entra con la contraseña nueva',
+                           str(sesion)[:160])
+
         if entrado:
             cabeceras = {'X-Session-Token': sesion['token']}
             estado, gente = _pedir(base, '/api/empleados', cabeceras=cabeceras)

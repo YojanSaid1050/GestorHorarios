@@ -577,3 +577,25 @@ def test_sin_permiso_y_con_el_repositorio_privado_no_se_construye(tmp_path, monk
 
     with pytest.raises(SystemExit, match='GESTOR_PERMISO'):
         construir.poner_el_permiso_de_actualizaciones()
+
+
+def test_la_autocomprobacion_pasa_de_verdad(carpeta_de_datos):
+    """No que mencione las direcciones: que conteste que la instalación está entera.
+
+    La prueba de aquí arriba mira que en el archivo aparezcan `/api/empleados` y
+    compañía. Eso comprueba que no se borre una comprobación por descuido, y
+    está bien, pero no vio nada cuando la comprobación **dejó de pasar**: al
+    poner el bloqueo de la contraseña de fábrica, entrar con ella y pedir la
+    plantilla empezó a contestar 403, la autocomprobación lo leyó como «falta la
+    plantilla» y el empaquetado se paró denunciando un paquete perfecto. El
+    texto seguía ahí, así que la prueba seguía en verde.
+
+    Esta arranca el servidor de verdad en una carpeta temporal y le pregunta.
+    Tarda unos segundos y vale lo que tarda: es lo único que separa un
+    instalador que abre de uno que no, y la publicación depende de ella.
+    """
+    from gestor.autocomprobacion import comprobar
+
+    assert comprobar() == 0, (
+        'la autocomprobación no pasa, así que el empaquetado se pararía y no se '
+        'publicaría nada. Lo de arriba dice qué comprobación falla.')
