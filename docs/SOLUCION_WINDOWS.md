@@ -1,4 +1,4 @@
-# Gestor de Horarios 4.3.0 candidata — instrucciones
+# Gestor de Horarios 4.3.1 candidata — instrucciones
 
 Esta entrega contiene el código completo refactorizado y el código del nuevo
 instalador. **No incluye un instalador `.exe` compilado ni una publicación nueva
@@ -43,7 +43,7 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe -m gestor.principal --diagnostico-ventana
 ```
 
-El título debe mostrar **4.3.0**. Si muestra 4.2.1 estás abriendo el programa
+El título debe mostrar **4.3.1**. Si muestra 4.2.1 estás abriendo el programa
 anterior. Comprueba que las cuentas aparecen, entra y revisa tu personal,
 solicitudes y último oficial. No uses todavía el acceso directo de la versión instalada.
 
@@ -124,7 +124,7 @@ En GitHub Actions la añade también al PATH de los pasos siguientes.
 Salida esperada:
 
 ```text
-dist\instalador\GestorHorarios-Instalar-4.3.0.exe
+dist\instalador\GestorHorarios-Instalar-4.3.1.exe
 ```
 
 El asistente incluye bienvenida, tema claro/oscuro según el sistema, estilo
@@ -171,18 +171,20 @@ No copies la base de prueba encima de la original como paso automático.
 El ZIP es una instantánea completa; no contiene `.git`. Con tus cambios actuales
 ya guardados en un commit, crea una rama nueva desde el `main` actualizado y
 compara/aplica esta instantánea. No sobrescribas trabajo tuyo sin revisar el diff.
-Esta corrección del workflow parte de `b20337e`; si `main` avanzó, habrá que
+Esta corrección del workflow parte de `5e7a6cb`; si `main` avanzó, habrá que
 integrar esos cambios.
 
 El flujo **«Revisar refactorización e instalador»** se ejecuta en una PR o
 manualmente y prepara el artefacto Windows con datos de ejemplo. Primero ejecuta
-la sonda de WebView2; solo si pasa construye y adjunta el instalador. El diagnóstico
+la sonda de WebView2; solo si pasa construye el instalador. Después comprueba sus destinos, realiza
+una instalación y una reinstalación en el runner, y abre la ventana instalada.
+Solo adjunta el instalador si también pasa esta aceptación. El diagnóstico
 queda en un artefacto separado, también cuando falla. Esta revisión del flujo
 no se ha ejecutado aquí en Windows.
 Si el runner no dispone de escritorio utilizable, conserva su diagnóstico y
 repite la prueba en un Windows interactivo antes de aceptar la versión.
 
-No crees la etiqueta `v4.3.0` hasta completar las comprobaciones: esa etiqueta
+No crees la etiqueta `v4.3.1` hasta completar las comprobaciones: esa etiqueta
 activa la publicación. La revisión actual no ha modificado tu GitHub.
 
 Consulta [ARQUITECTURA.md](ARQUITECTURA.md) para los cambios, límites y **funciones
@@ -190,3 +192,20 @@ nuevas propuestas que todavía no están implementadas**.
 
 Consulta [REVISION_PIPELINE_WINDOWS.md](REVISION_PIPELINE_WINDOWS.md) para el
 fallo de Inno Setup, las etapas revisadas y cómo iniciar una ejecución nueva.
+
+## 8. Corrección del destino de instalación (4.3.1)
+
+El instalador anterior podía enviar `C:\Windows` a Velopack por una opción
+incorrecta de Inno. No lo vuelvas a ejecutar, tampoco como administrador.
+Elimina o aparta únicamente ese EXE de instalación antiguo; conserva tus datos.
+Si el escritorio quedó inestable, guarda el trabajo y reinicia Windows.
+
+La nueva construcción se identifica como `GestorHorarios-Instalar-4.3.1.exe`.
+En una instalación nueva debe aparecer la página para elegir carpeta. Si hay
+una instalación válida previa, se muestra su ruta y se conserva para actualizar.
+Una ubicación registrada inválida se ignora; no hay que editar el registro a mano.
+
+Antes de instalar, confirma que el resumen muestra la carpeta del Gestor.
+El workflow debe incluir en verde **Probar destinos e instalación real del asistente**.
+Su diagnóstico queda dentro del artefacto de diagnóstico, carpeta `instalador`.
+Consulta [INCIDENTE_INSTALADOR_4_3_1.md](INCIDENTE_INSTALADOR_4_3_1.md).

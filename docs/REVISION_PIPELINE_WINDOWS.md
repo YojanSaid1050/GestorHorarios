@@ -1,5 +1,9 @@
 # Revisión del workflow y del instalador
 
+> Historial de la revisión anterior. La instalación real detectó después un fallo
+> de destino en el asistente. La corrección y las nuevas pruebas están en
+> [INCIDENTE_INSTALADOR_4_3_1.md](INCIDENTE_INSTALADOR_4_3_1.md).
+
 Base revisada: `main`, commit `b20337e`. Esta entrega corrige el código fuente;
 no contiene un EXE compilado ni acredita una ejecución nueva de Actions.
 

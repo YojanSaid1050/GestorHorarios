@@ -27,7 +27,8 @@ WizardSmallImageFile=arte\calendario.png
 MinVersion=10.0.17763
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-CreateAppDir=no
+CreateAppDir=yes
+UsePreviousAppDir=no
 Uninstallable=no
 CreateUninstallRegKey=no
 OutputDir=..\dist\instalador
@@ -67,10 +68,21 @@ var
   Progreso: TOutputMarqueeProgressWizardPage;
   Instalado: Boolean;
 
+#include "destino_seguro.iss"
+
 procedure InitializeWizard;
+var
+  Detectada: String;
 begin
   Instalado := False;
-  if RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\GestorHorarios', 'InstallLocation', CarpetaAnterior) then begin
+  CarpetaAnterior := '';
+  if RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\GestorHorarios', 'InstallLocation', Detectada) then begin
+    if (ErrorRuta(Detectada) = '') and EsInstalacionGestor(Detectada) then
+      CarpetaAnterior := RutaNormalizada(Detectada)
+    else
+      Log('Se ignora una ruta registrada que no es una instalación válida y segura del Gestor.');
+  end;
+  if CarpetaAnterior <> '' then begin
     WizardForm.DirEdit.Text := CarpetaAnterior;
     WizardForm.DirEdit.Enabled := False;
     WizardForm.DirBrowseButton.Enabled := False;
@@ -81,30 +93,14 @@ end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
 var
-  Encontrado: TFindRec;
-  HayArchivos: Boolean;
+  Error: String;
 begin
   Result := True;
   if CurPageID = wpSelectDir then begin
-    if (CarpetaAnterior <> '') and (CompareText(WizardDirValue, CarpetaAnterior) <> 0) then begin
-      MsgBox('Para actualizar, conserva la carpeta de la instalación existente.', mbError, MB_OK);
+    Error := ErrorDestino(WizardDirValue, CarpetaAnterior);
+    if Error <> '' then begin
+      if WizardSilent then Log(Error) else MsgBox(Error, mbError, MB_OK);
       Result := False;
-    end;
-    if (CarpetaAnterior = '') and DirExists(WizardDirValue) then begin
-      HayArchivos := False;
-      if FindFirst(AddBackslash(WizardDirValue) + '*', Encontrado) then begin
-        try
-          repeat
-            if (Encontrado.Name <> '.') and (Encontrado.Name <> '..') then HayArchivos := True;
-          until not FindNext(Encontrado);
-        finally
-          FindClose(Encontrado);
-        end;
-      end;
-      if HayArchivos then begin
-        MsgBox('Selecciona una carpeta vacía para esta instalación.', mbError, MB_OK);
-        Result := False;
-      end;
     end;
   end;
 end;
@@ -112,20 +108,29 @@ end;
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   Codigo: Integer;
+  Destino: String;
 begin
-  Result := '';
+  Destino := WizardDirValue;
+  Result := ErrorDestino(Destino, CarpetaAnterior);
+  if Result <> '' then Exit;
+  Destino := RutaNormalizada(Destino);
+  if CompareText(Destino, RutaNormalizada(ExpandConstant('{app}'))) <> 0 then begin
+    Result := 'La carpeta elegida no coincide con la carpeta del asistente. Se ha cancelado la instalación.';
+    Exit;
+  end;
   if Instalado then Exit;
   ForceDirectories(ExpandConstant('{localappdata}\GestorHorarios-datos'));
   Progreso.Show;
   Progreso.Animate;
   try
+    Log('Destino validado para Velopack: ' + Destino);
     ExtractTemporaryFile('MotorInstalacion.exe');
     Progreso.SetText('Instalando la aplicación', 'Se comprobará Microsoft Edge WebView2. Si falta, su descarga requiere conexión a Internet.');
-    if not Exec(ExpandConstant('{tmp}\MotorInstalacion.exe'), '--silent --installto "' + WizardDirValue + '" --log "' + ExpandConstant('{localappdata}\GestorHorarios-datos\instalacion.log') + '"', '', SW_HIDE, ewWaitUntilTerminated, Codigo) then
+    if not Exec(ExpandConstant('{tmp}\MotorInstalacion.exe'), '--silent --installto "' + Destino + '" --log "' + ExpandConstant('{localappdata}\GestorHorarios-datos\instalacion.log') + '"', '', SW_HIDE, ewWaitUntilTerminated, Codigo) then
       Result := 'No se pudo iniciar la instalación. Revisa el espacio disponible y vuelve a intentarlo.'
     else if Codigo <> 0 then
       Result := 'La instalación no terminó (código ' + IntToStr(Codigo) + '). Registro: ' + ExpandConstant('{localappdata}\GestorHorarios-datos\instalacion.log')
-    else if not FileExists(AddBackslash(WizardDirValue) + 'current\GestorHorarios.exe') then
+    else if not FileExists(AddBackslash(Destino) + 'current\GestorHorarios.exe') then
       Result := 'No se encontró la aplicación instalada. Revisa el registro de instalación.'
     else Instalado := True;
   finally
