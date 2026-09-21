@@ -78,9 +78,12 @@ jobs:
 
 
       - name: Instalar vpk
-        run: |
-          dotnet tool install -g vpk
-          choco install innosetup --version=6.7.3 --yes --no-progress
+        run: dotnet tool install -g vpk
+
+      - name: Instalar Inno Setup desde la fuente oficial
+        shell: pwsh
+        timeout-minutes: 5
+        run: ./empaquetado/preparar_inno.ps1
 
       - name: Comprobar que la plantilla de la oficina está puesta
         # El repositorio es público, así que lo que hay escrito en él son

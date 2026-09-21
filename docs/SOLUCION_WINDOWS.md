@@ -102,19 +102,20 @@ complementa, pero no sustituye, la apertura con tu copia real.
 
 Herramientas adicionales en Windows: SDK de .NET para ejecutar `vpk`, PyInstaller
 e Inno Setup **6.6 o posterior**; los flujos de GitHub fijan **6.7.3**. Instala Inno
-Setup desde su sitio oficial o con Chocolatey si ya lo utilizas:
+Setup con el script incluido, que descarga la versión oficial y verifica su firma:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install pyinstaller
 dotnet tool install -g vpk
-choco install innosetup --version=6.7.3 --yes --no-progress
+.\empaquetado\preparar_inno.ps1
 .\.venv\Scripts\python.exe -m ruff check gestor empaquetado pruebas qa
 .\.venv\Scripts\python.exe -m pytest --lentas
 .\.venv\Scripts\python.exe empaquetado/construir.py
 ```
 
-Si `vpk` ya está instalado, omite su instalación. Inno debe estar en PATH o en su
-carpeta predeterminada `Program Files (x86)\Inno Setup 6`.
+Si `vpk` ya está instalado, omite su instalación. El script coloca Inno en
+`%LOCALAPPDATA%\Programs\Inno Setup 6` y añade esa ubicación al PATH de la sesión.
+En GitHub Actions la añade también al PATH de los pasos siguientes.
 
 Salida esperada:
 
