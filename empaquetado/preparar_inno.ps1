@@ -33,13 +33,40 @@ $compiladorInno = Join-Path $destinoInno 'ISCC.exe'
 if (-not (Test-Path $compiladorInno -PathType Leaf)) {
     throw "La instalación no dejó el compilador esperado: $compiladorInno"
 }
-$versionInstalada = (Get-Item $compiladorInno).VersionInfo.ProductVersion
-if ($versionInstalada -notmatch '^6\.7\.3(?:\.|$)') {
-    throw "Se esperaba Inno Setup $versionInno, pero ISCC indica $versionInstalada"
+# ISCC.exe es la entrada de consola: ProductVersion no identifica el motor.
+# En 6.7.3 la versión se consulta mediante Ver en el preprocesador del compilador.
+# Compilar verifica también las DLL, recursos y opciones de apariencia necesarias.
+$rutaSonda = Join-Path $temporalInno 'ComprobacionInno.iss'
+$ejecutableSonda = Join-Path $temporalInno 'ComprobacionInno.exe'
+$contenidoSonda = @"
+#if DecodeVer(Ver, 3) != "$versionInno"
+  #error La version del motor de Inno Setup no coincide con la requerida.
+#endif
+[Setup]
+AppName=Comprobacion del compilador
+AppVersion=1.0
+DefaultDirName={tmp}\ComprobacionInno
+CreateAppDir=no
+Uninstallable=no
+PrivilegesRequired=lowest
+WizardStyle=modern dynamic windows11
+OutputBaseFilename=ComprobacionInno
+"@
+Set-Content -LiteralPath $rutaSonda -Value $contenidoSonda -Encoding utf8
+Write-Host "Comprobando Inno Setup $versionInno mediante una compilación real..."
+& $compiladorInno "/O$temporalInno" $rutaSonda
+$codigoSonda = $LASTEXITCODE
+if ($codigoSonda -ne 0) {
+    throw "Falló la comprobación del compilador (código $codigoSonda). Revisa su salida anterior."
 }
+if (-not (Test-Path $ejecutableSonda -PathType Leaf)) {
+    throw 'El compilador terminó sin generar el ejecutable de comprobación.'
+}
+# La sonda solo se compila; nunca se instala ni se incluye en los artefactos.
+Remove-Item -LiteralPath $ejecutableSonda
 # GITHUB_PATH se incorpora en los pasos posteriores. PATH sirve también al uso local.
 $env:PATH = "$destinoInno;$env:PATH"
 if ($env:GITHUB_PATH) {
     Add-Content -LiteralPath $env:GITHUB_PATH -Value $destinoInno -Encoding utf8
 }
-Write-Host "Inno Setup $versionInstalada preparado: $compiladorInno"
+Write-Host "Inno Setup $versionInno comprobado y preparado: $compiladorInno"

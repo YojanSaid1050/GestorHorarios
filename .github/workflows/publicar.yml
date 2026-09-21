@@ -26,10 +26,7 @@ jobs:
           python-version: '3.11'
 
       - name: Instalar dependencias
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requisitos.txt
-          pip install pyinstaller
+        run: python -m pip install -r requisitos.txt -r empaquetado/requisitos-construccion.txt
 
       - name: Dejar escrito con qué versiones se probó
         # Un registro de publicación tiene que poder contestar «¿con qué se
@@ -43,12 +40,19 @@ jobs:
         # aplicación instalada creyendo que ya está al día. Se para aquí.
         shell: pwsh
         run: |
+          if ($env:GITHUB_REF_TYPE -ne 'tag') {
+            throw 'Publicar requiere una etiqueta vX.Y.Z. Para probar main usa el workflow de revisión.'
+          }
           $enElCodigo = python -c "from gestor.version import VERSION; print(VERSION)"
-          $enLaEtiqueta = "${{ github.ref_name }}".TrimStart('v')
+          if ($LASTEXITCODE -ne 0) { throw 'No se pudo leer la versión del programa.' }
+          $enLaEtiqueta = $env:GITHUB_REF_NAME -replace '^v', ''
           if ($enElCodigo -ne $enLaEtiqueta) {
             Write-Error "La etiqueta dice $enLaEtiqueta y gestor/version.py dice $enElCodigo."
             exit 1
           }
+
+      - name: Revisar el código con Ruff
+        run: python -m ruff check gestor empaquetado pruebas qa
 
       - name: Pasar la batería de pruebas
         # No se publica lo que no pasa sus propias pruebas.
@@ -78,7 +82,7 @@ jobs:
 
 
       - name: Instalar vpk
-        run: dotnet tool install -g vpk
+        run: dotnet tool install -g vpk --version 1.2.0
 
       - name: Instalar Inno Setup desde la fuente oficial
         shell: pwsh
@@ -102,18 +106,28 @@ jobs:
             exit 1
           }
 
-      - name: Construir el instalador
+      - name: Crear el ejecutable y comprobar el servidor
         env:
           GESTOR_NOMINA: ${{ secrets.GESTOR_NOMINA }}
           GESTOR_PERMISO: ${{ secrets.GESTOR_PERMISO }}
-        run: python empaquetado/construir.py
+        run: python empaquetado/construir.py --solo-exe
 
       - name: Comprobar la ventana real antes de publicar
         shell: pwsh
-        run: |
-          $proceso = Start-Process -FilePath '.\dist\GestorHorarios\GestorHorarios.exe' -ArgumentList '--comprobar-ventana' -Wait -PassThru
-          Get-Content "$env:LOCALAPPDATA/GestorHorarios-datos/comprobacion-ventana.json" -ErrorAction SilentlyContinue
-          if ($proceso.ExitCode -ne 0) { throw "Falló la ventana real; no se publica." }
+        timeout-minutes: 3
+        run: ./empaquetado/comprobar_ventana.ps1
+
+      - name: Crear paquetes de Velopack y asistente de Inno Setup
+        run: python -c "from empaquetado.construir import empaquetar; empaquetar()"
+
+      - name: Guardar diagnóstico
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GestorHorarios-diagnostico-publicacion
+          path: dist/diagnostico/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Publicar en la versión de GitHub
         uses: softprops/action-gh-release@v2

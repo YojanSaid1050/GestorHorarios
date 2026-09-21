@@ -100,20 +100,24 @@ complementa, pero no sustituye, la apertura con tu copia real.
 
 ## 5. Construir el nuevo instalador
 
-Herramientas adicionales en Windows: SDK de .NET para ejecutar `vpk`, PyInstaller
+Herramientas adicionales en Windows: PowerShell 7, SDK de .NET para ejecutar `vpk`, PyInstaller
 e Inno Setup **6.6 o posterior**; los flujos de GitHub fijan **6.7.3**. Instala Inno
 Setup con el script incluido, que descarga la versión oficial y verifica su firma:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install pyinstaller
-dotnet tool install -g vpk
+.\.venv\Scripts\python.exe -m pip install -r empaquetado/requisitos-construccion.txt
+dotnet tool install -g vpk --version 1.2.0
 .\empaquetado\preparar_inno.ps1
 .\.venv\Scripts\python.exe -m ruff check gestor empaquetado pruebas qa
 .\.venv\Scripts\python.exe -m pytest --lentas
-.\.venv\Scripts\python.exe empaquetado/construir.py
+.\.venv\Scripts\python.exe empaquetado/construir.py --solo-exe
+.\empaquetado\comprobar_ventana.ps1
+.\.venv\Scripts\python.exe -c "from empaquetado.construir import empaquetar; empaquetar()"
 ```
 
-Si `vpk` ya está instalado, omite su instalación. El script coloca Inno en
+Ejecuta los comandos uno a uno y detente si alguno falla. Si `vpk` ya está
+instalado, comprueba con `dotnet tool list -g` que sea 1.2.0. Para ajustarlo:
+`dotnet tool update -g vpk --version 1.2.0 --allow-downgrade`. El script coloca Inno en
 `%LOCALAPPDATA%\Programs\Inno Setup 6` y añade esa ubicación al PATH de la sesión.
 En GitHub Actions la añade también al PATH de los pasos siguientes.
 
@@ -167,11 +171,14 @@ No copies la base de prueba encima de la original como paso automático.
 El ZIP es una instantánea completa; no contiene `.git`. Con tus cambios actuales
 ya guardados en un commit, crea una rama nueva desde el `main` actualizado y
 compara/aplica esta instantánea. No sobrescribas trabajo tuyo sin revisar el diff.
-Esta entrega parte de `e5b555d`; si `main` avanzó, habrá que integrar esos cambios.
+Esta corrección del workflow parte de `b20337e`; si `main` avanzó, habrá que
+integrar esos cambios.
 
 El flujo **«Revisar refactorización e instalador»** se ejecuta en una PR o
-manualmente y prepara el artefacto Windows con datos de ejemplo. También ejecuta
-la sonda de WebView2. Ese flujo se ha añadido, pero no se ha ejecutado aquí.
+manualmente y prepara el artefacto Windows con datos de ejemplo. Primero ejecuta
+la sonda de WebView2; solo si pasa construye y adjunta el instalador. El diagnóstico
+queda en un artefacto separado, también cuando falla. Esta revisión del flujo
+no se ha ejecutado aquí en Windows.
 Si el runner no dispone de escritorio utilizable, conserva su diagnóstico y
 repite la prueba en un Windows interactivo antes de aceptar la versión.
 
@@ -180,3 +187,6 @@ activa la publicación. La revisión actual no ha modificado tu GitHub.
 
 Consulta [ARQUITECTURA.md](ARQUITECTURA.md) para los cambios, límites y **funciones
 nuevas propuestas que todavía no están implementadas**.
+
+Consulta [REVISION_PIPELINE_WINDOWS.md](REVISION_PIPELINE_WINDOWS.md) para el
+fallo de Inno Setup, las etapas revisadas y cómo iniciar una ejecución nueva.

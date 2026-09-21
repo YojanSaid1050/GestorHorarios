@@ -1,0 +1,4 @@
+# Versiones que se instalaron correctamente en el registro Windows del usuario.
+# Mantenerlas iguales en revisión y publicación.
+pyinstaller==6.22.3
+pyinstaller-hooks-contrib==2026.7

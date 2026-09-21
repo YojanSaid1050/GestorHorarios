@@ -14,35 +14,37 @@ jobs:
         with:
           python-version: '3.11'
       - name: Instalar dependencias de Python
-        run: python -m pip install -r requisitos.txt pyinstaller
+        run: python -m pip install -r requisitos.txt -r empaquetado/requisitos-construccion.txt
       - name: Instalar Velopack
-        run: dotnet tool install -g vpk
+        run: dotnet tool install -g vpk --version 1.2.0
       - name: Instalar Inno Setup desde la fuente oficial
         shell: pwsh
         timeout-minutes: 5
         run: ./empaquetado/preparar_inno.ps1
-      - name: Revisar código y funciones
-        run: |
-          python -m ruff check gestor empaquetado pruebas qa
-          python -m pytest --lentas -v --durations=15
-      - name: Construir el instalador de revisión con datos de ejemplo
-        run: python empaquetado/construir.py
+      - name: Revisar el código con Ruff
+        run: python -m ruff check gestor empaquetado pruebas qa
+      - name: Probar las funciones
+        run: python -m pytest --lentas -v --durations=15
+      - name: Crear el ejecutable y comprobar el servidor con datos de ejemplo
+        run: python empaquetado/construir.py --solo-exe
       - name: Abrir WebView2 y probar el puente del ejecutable real
         shell: pwsh
-        run: |
-          $proceso = Start-Process -FilePath '.\dist\GestorHorarios\GestorHorarios.exe' -ArgumentList '--comprobar-ventana' -Wait -PassThru
-          if ($proceso.ExitCode -ne 0) { throw "Falló la comprobación nativa: $($proceso.ExitCode)" }
-      - name: Conservar diagnóstico nativo
+        timeout-minutes: 3
+        run: ./empaquetado/comprobar_ventana.ps1
+      - name: Crear paquetes de Velopack y asistente de Inno Setup
+        run: python -c "from empaquetado.construir import empaquetar; empaquetar()"
+      - name: Guardar diagnóstico
         if: always()
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force dist/diagnostico | Out-Null
-          Copy-Item "$env:LOCALAPPDATA/GestorHorarios-datos/comprobacion-ventana.*" dist/diagnostico/ -ErrorAction SilentlyContinue
-      - uses: actions/upload-artifact@v4
-        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GestorHorarios-diagnostico-Windows
+          path: dist/diagnostico/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Guardar instalador comprobado
+        uses: actions/upload-artifact@v4
         with:
           name: GestorHorarios-revision-Windows
-          path: |
-            dist/instalador/
-            dist/diagnostico/
+          path: dist/instalador/
+          if-no-files-found: error
           retention-days: 7

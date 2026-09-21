@@ -24,12 +24,16 @@ import pytest
 from gestor import version
 
 RAIZ = Path(__file__).resolve().parents[1]
-velopack = pytest.importorskip('velopack', reason='Velopack solo hace falta en Windows')
+
+
+@pytest.fixture
+def velopack():
+    return pytest.importorskip('velopack', reason='Velopack solo hace falta en Windows')
 
 
 # ------------------------------------------------- la forma de Velopack
 
-def test_existe_lo_que_usa_el_arranque():
+def test_existe_lo_que_usa_el_arranque(velopack):
     """`App`, con los tres métodos que `principal.py` llama."""
     App = velopack.App
     for metodo in ('run', 'set_auto_apply_on_startup',
@@ -37,14 +41,14 @@ def test_existe_lo_que_usa_el_arranque():
         assert hasattr(App, metodo), f'velopack.App no tiene {metodo}'
 
 
-def test_el_gancho_de_desinstalar_se_registra_llamándolo():
+def test_el_gancho_de_desinstalar_se_registra_llamándolo(velopack):
     """Es un método, no un atributo. Asignarlo da «read-only» y no hace nada."""
     aplicacion = velopack.App()
     aplicacion.set_auto_apply_on_startup(False)
     aplicacion.on_before_uninstall_fast_callback(lambda _version: None)
 
 
-def test_existe_lo_que_usan_las_actualizaciones():
+def test_existe_lo_que_usan_las_actualizaciones(velopack):
     for metodo in ('check_for_updates', 'download_updates',
                    'apply_updates_and_restart', 'get_current_version'):
         assert hasattr(velopack.UpdateManager, metodo), (
