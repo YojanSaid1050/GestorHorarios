@@ -18,6 +18,8 @@ un sitio porque cada detalle de aquí costó una vuelta entera de pruebas:
 """
 from __future__ import annotations
 
+from qa.servidor import CLAVE_ADMIN_QA
+
 
 class App:
     """La aplicación abierta en un navegador, con lo justo para conducirla."""
@@ -38,7 +40,7 @@ class App:
             print(f"  [{'ok' if ok else 'FALLA'}] {que}"
                   + (f'  -> {detalle}' if not ok else ''), flush=True)
 
-    def entrar(self, base, usuario='admin', clave='xYojanSaidx1050'):
+    def entrar(self, base, usuario='admin', clave=CLAVE_ADMIN_QA):
         """Entrar eligiendo la cuenta **por su nombre**, no por su posición.
 
         Elegirla por posición ya costó una vuelta entera: la lista de cuentas

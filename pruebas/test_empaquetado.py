@@ -489,7 +489,7 @@ def test_el_programa_no_depende_de_que_haya_una_consola():
     así que se comprueba que las dos defensas sigan puestas.
     """
     codigo = (RAIZ / 'gestor' / 'principal.py').read_text(encoding='utf-8')
-    assert 'log_config=None' in codigo, (
+    assert 'log_config=None' in (RAIZ / 'gestor' / 'servidor_local.py').read_text(), (
         'sin esto, uvicorn monta su registro y pregunta por la consola al '
         'arrancar; en el programa instalado no hay ninguna')
     assert '_con_salida_aunque_no_haya_consola' in codigo

@@ -28,10 +28,10 @@ RAIZ = Path(__file__).resolve().parents[1]
 if str(RAIZ) not in sys.path:
     sys.path.insert(0, str(RAIZ))
 
+from qa.navegador import abrir as abrir_navegador  # noqa: E402
 from qa.servidor import Servidor, entrar_como_admin  # noqa: E402
 from qa.uso import App  # noqa: E402
 
-NAVEGADOR = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
 CAPTURAS = Path('/tmp/qa_ventana')
 
 #: El puente de mentira. Tiene los mismos nombres que `gestor/escritorio.py` y
@@ -383,8 +383,7 @@ def main() -> int:
         cabeceras = entrar_como_admin(servidor)
         print(f'Servidor en {servidor.base}\n')
         with sync_playwright() as guion:
-            navegador = guion.chromium.launch(executable_path=NAVEGADOR,
-                                              args=['--no-sandbox'])
+            navegador = abrir_navegador(guion)
             pagina = navegador.new_page(viewport={'width': 1400, 'height': 900})
             # El puente, antes de que cargue la página: la barra se enciende al
             # arrancar y tiene que encontrarlo ya puesto.

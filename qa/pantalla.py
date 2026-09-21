@@ -28,11 +28,11 @@ RAIZ = Path(__file__).resolve().parents[1]
 if str(RAIZ) not in sys.path:
     sys.path.insert(0, str(RAIZ))
 
+from qa.navegador import abrir as abrir_navegador  # noqa: E402
 from qa.servidor import Servidor, entrar_como_admin  # noqa: E402
 from qa.uso import App  # noqa: E402
 
 CAPTURAS = Path('/tmp/qa_capturas')
-NAVEGADOR = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
 
 #: Las de verdad, leídas del HTML. La lista escrita a mano se descolgaba en
 #: cuanto se renombraba una: la suite pedía «asignaciones» y la pantalla la
@@ -355,8 +355,7 @@ def main() -> int:
         cabeceras = entrar_como_admin(servidor)
         print(f'Servidor en {servidor.base}\n')
         with sync_playwright() as guion:
-            navegador = guion.chromium.launch(
-                executable_path=NAVEGADOR, args=['--no-sandbox'])
+            navegador = abrir_navegador(guion)
             pagina = navegador.new_page(viewport={'width': 1600, 'height': 1000})
             app = App(pagina)
             try:

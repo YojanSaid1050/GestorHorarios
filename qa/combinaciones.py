@@ -24,7 +24,7 @@ if str(RAIZ) not in sys.path:
 
 from pruebas.auditor import auditar  # noqa: E402
 from qa.encadenado import reglas_vigentes_en  # noqa: E402
-from qa.servidor import Servidor, entrar_como_admin  # noqa: E402
+from qa.servidor import CLAVE_ADMIN_QA, Servidor, entrar_como_admin  # noqa: E402
 
 
 class Acta:
@@ -109,8 +109,14 @@ def novedad_aprobada(servidor, cabeceras, acta):
                        'y las vacaciones aparecen en el horario nuevo', vacaciones)
         estado, periodo = servidor.pedir('/api/operacion/periodo/2026/10',
                                          cabeceras=cabeceras)
+        acta.comprobar(periodo['desactualizado'] is True,
+                       'el borrador no borra el pendiente del oficial')
+        nueva = regenerado['alternativas'][0]['horario_id']
+        servidor.pedir(f'/api/horarios/{nueva}/oficial', 'PATCH', None, cabeceras)
+        estado, periodo = servidor.pedir('/api/operacion/periodo/2026/10',
+                                         cabeceras=cabeceras)
         acta.comprobar(periodo['desactualizado'] is False,
-                       'y el mes deja de estar marcado')
+                       'el pendiente se resuelve al elegir la propuesta actualizada')
 
 
 def retiro_de_personal(servidor, cabeceras, acta):
@@ -128,8 +134,9 @@ def retiro_de_personal(servidor, cabeceras, acta):
     acta.comprobar(estado == 200, 'se retira', retirada)
 
     estado, activos = servidor.pedir('/api/empleados', cabeceras=cabeceras)
-    acta.comprobar(quien['id'] not in {p['id'] for p in activos},
-                   'deja de estar en la plantilla activa')
+    ficha = next((p for p in activos if p['id'] == quien['id']), None)
+    acta.comprobar(ficha is None or ficha['retirado_desde'] == '2026-10-31',
+                   'el retiro queda fechado y no elimina anticipadamente a la persona')
     estado, todos = servidor.pedir('/api/empleados?incluir_inactivos=true',
                                    cabeceras=cabeceras)
     acta.comprobar(quien['id'] in {p['id'] for p in todos},
@@ -141,6 +148,9 @@ def retiro_de_personal(servidor, cabeceras, acta):
                 for f in oficial['horario']['datos']['horario'])
     acta.comprobar(sigue, 'y el mes ya publicado la sigue mostrando')
 
+    # La semana compartida del oficial anterior se conserva. Incorporar primero
+    # el retiro en octubre evita heredar un 1 de noviembre anterior al cambio.
+    _generar_y_oficializar(servidor, cabeceras, 2026, 10)
     estado, nuevo = servidor.pedir('/api/horarios/generar', 'POST',
                                    {'mes': 11, 'anio': 2026}, cabeceras)
     if estado == 200:
@@ -255,7 +265,7 @@ def reinicio(servidor, cabeceras, acta):
     estado, respuesta = servidor.pedir(
         '/api/configuracion/reiniciar-programacion', 'POST',
         {'mes': 10, 'anio': 2026},
-        {**cabeceras, 'X-User-Password': 'xYojanSaidx1050'})
+        {**cabeceras, 'X-User-Password': CLAVE_ADMIN_QA})
     acta.comprobar(estado == 200, 'se reinicia', str(respuesta)[:200])
     if estado != 200:
         return

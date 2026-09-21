@@ -5,7 +5,8 @@ Programación de turnos por semanas completas para una oficina de tres áreas
 se abre como un programa de escritorio y guarda todo en el equipo: no hay
 servidor al que conectarse ni cuenta que crear fuera.
 
-Versión **4.0.0**. Todo —código, comentarios, pruebas y pantalla— está escrito
+Versión **4.3.0 candidata**. Instrucciones de revisión: [guía de Windows](docs/SOLUCION_WINDOWS.md).
+Arquitectura y alcance: [refactorización](docs/ARQUITECTURA.md). Todo —código, comentarios, pruebas y pantalla— está escrito
 en castellano, a propósito: lo mantiene y lo lee gente que trabaja en castellano.
 
 ## La idea que hay que entender antes que nada

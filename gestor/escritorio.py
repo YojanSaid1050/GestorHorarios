@@ -101,9 +101,24 @@ class Puente:
     """
 
     def __init__(self, barra_propia: bool = False) -> None:
-        self.ventana = None
+        # pywebview recorre recursivamente los atributos públicos del js_api.
+        # La ventana contiene objetos nativos y propiedades que esperan a la GUI.
+        # Exponerla puede bloquear la inyección y publica métodos ajenos al puente.
+        self._ventana = None
         self._maximizada = False
         self._barra_propia = bool(barra_propia)
+
+    def leer_clave(self, usuario: str) -> dict:
+        from gestor.servicios.claves_locales import leer
+        return leer(usuario)
+
+    def guardar_clave(self, usuario: str, password: str) -> dict:
+        from gestor.servicios.claves_locales import guardar
+        return guardar(usuario, password)
+
+    def olvidar_clave(self, usuario: str) -> dict:
+        from gestor.servicios.claves_locales import olvidar
+        return olvidar(usuario)
 
     def barra_propia(self) -> bool:
         """¿Tiene que pintar la pantalla su propia barra de título?
@@ -122,10 +137,10 @@ class Puente:
         return self._barra_propia
 
     def _hacer(self, metodo: str) -> bool:
-        accion = getattr(self.ventana, metodo, None)
+        accion = getattr(self._ventana, metodo, None)
         if accion is None:
-            obtener().warning('la ventana no tiene «%s» en esta versión de '
-                              'pywebview', metodo)
+            obtener().warning('el objeto de ventana %s no ofrece «%s»',
+                              type(self._ventana).__name__, metodo)
             return False
         try:
             accion()
@@ -166,7 +181,7 @@ class Puente:
         El mínimo se respeta aquí y no solo en la pantalla, porque quien decide
         cuánto puede encogerse esta ventana es el programa y no el JavaScript.
         """
-        if self.ventana is None:
+        if self._ventana is None:
             return False
         try:
             ancho = max(int(ancho), marco.ANCHO_MINIMO)
@@ -175,7 +190,7 @@ class Puente:
             obtener().warning('la pantalla pidió un tamaño que no son números: '
                               '%r×%r', ancho, alto)
             return False
-        cambiar = getattr(self.ventana, 'resize', None)
+        cambiar = getattr(self._ventana, 'resize', None)
         if cambiar is None:
             obtener().warning('la ventana no tiene «resize» en esta versión de '
                               'pywebview: no se podrá redimensionar sin marco')
@@ -231,7 +246,8 @@ def _apuntarse_a_los_avisos(ventana, puente: Puente) -> None:
             obtener().exception('no se pudo escuchar el aviso «%s»', nombre)
 
 
-def crear(url: str, titulo: str, puente: Optional[Puente] = None):
+def crear(url: str, titulo: str, puente: Optional[Puente] = None, *,
+          segura: bool = False, sin_puente: bool = False):
     """La ventana, con las medidas de la última vez y la barra que toque.
 
     Devuelve la ventana y el puente. Que falle algo de aquí no puede impedir
@@ -241,9 +257,15 @@ def crear(url: str, titulo: str, puente: Optional[Puente] = None):
     import webview
 
     try:
-        puesta = marco.como_abrir(pantallas_del_sistema())
+        puesta = (marco.como_abrir(pantallas_del_sistema()) if not segura else
+                  {'ancho': marco.ANCHO_POR_DEFECTO, 'alto': marco.ALTO_POR_DEFECTO,
+                   'x': None, 'y': None, 'maximizada': False, 'barra_propia': False})
     except Exception:                                              # noqa: BLE001
         obtener().exception('no se pudo leer cómo quedó la ventana la última vez')
+        puesta = {'ancho': marco.ANCHO_POR_DEFECTO, 'alto': marco.ALTO_POR_DEFECTO,
+                  'x': None, 'y': None, 'maximizada': False, 'barra_propia': False}
+
+    if segura:
         puesta = {'ancho': marco.ANCHO_POR_DEFECTO, 'alto': marco.ALTO_POR_DEFECTO,
                   'x': None, 'y': None, 'maximizada': False, 'barra_propia': False}
 
@@ -256,7 +278,7 @@ def crear(url: str, titulo: str, puente: Optional[Puente] = None):
         'min_size': (marco.ANCHO_MINIMO, marco.ALTO_MINIMO),
         'resizable': True,
         'confirm_close': False,
-        'js_api': puente,
+        'js_api': None if sin_puente else puente,
     }
     if puesta['x'] is not None and puesta['y'] is not None:
         opciones['x'], opciones['y'] = puesta['x'], puesta['y']
@@ -289,10 +311,11 @@ def crear(url: str, titulo: str, puente: Optional[Puente] = None):
             opciones.pop(solo_estetico, None)
         puente._barra_propia = False
         ventana = webview.create_window(titulo, url, **opciones)
-    puente.ventana = ventana
+    puente._ventana = ventana
     # De `opciones` y no de `puesta`: si hubo que caer a la ventana normal, la
     # maximización se quedó por el camino y el botón tiene que saberlo, o el
     # primer clic no haría nada.
     puente._maximizada = bool(opciones.get('maximized'))
-    _apuntarse_a_los_avisos(ventana, puente)
+    if not segura:
+        _apuntarse_a_los_avisos(ventana, puente)
     return ventana, puente

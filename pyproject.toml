@@ -88,9 +88,12 @@ ignore = [
 "gestor/motor/orquestacion.py" = ["E501"]
 "gestor/motor/presupuesto.py" = ["E501", "SIM113"]
 "gestor/motor/reparacion.py" = ["E501", "B007"]
+# Las funciones trasladadas conservan las mismas excepciones de formato.
+"gestor/motor/reparaciones/*.py" = ["E501", "B007"]
 "gestor/motor/validacion.py" = ["E501", "SIM102"]
 "gestor/motor/vocabulario.py" = ["E501", "F401"]
 "gestor/servicios/excel.py" = ["E501"]
+"gestor/servicios/exportacion_excel/*.py" = ["E501"]
 "gestor/servicios/apariencia.py" = ["E501", "S110"]
 "gestor/dominio/avisos.py" = ["E501"]
 "gestor/dominio/rotacion.py" = ["E501", "SIM102"]

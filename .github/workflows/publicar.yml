@@ -62,7 +62,7 @@ jobs:
         # `-x` para en el primer fallo: aquí no interesa el listado completo,
         # interesa no gastar una máquina Windows en las cuatrocientas pruebas
         # que vienen después de la que ya falló.
-        run: python -m pytest -v -x --durations=15
+        run: python -m pytest --lentas -v -x --durations=15
 
       - name: Enseñar dónde se quedó, si se quedó
         # Solo corre cuando el paso de arriba ha fallado. El tope por prueba deja
@@ -78,7 +78,9 @@ jobs:
 
 
       - name: Instalar vpk
-        run: dotnet tool install -g vpk
+        run: |
+          dotnet tool install -g vpk
+          choco install innosetup --version=6.7.3 --yes --no-progress
 
       - name: Comprobar que la plantilla de la oficina está puesta
         # El repositorio es público, así que lo que hay escrito en él son
@@ -102,6 +104,13 @@ jobs:
           GESTOR_NOMINA: ${{ secrets.GESTOR_NOMINA }}
           GESTOR_PERMISO: ${{ secrets.GESTOR_PERMISO }}
         run: python empaquetado/construir.py
+
+      - name: Comprobar la ventana real antes de publicar
+        shell: pwsh
+        run: |
+          $proceso = Start-Process -FilePath '.\dist\GestorHorarios\GestorHorarios.exe' -ArgumentList '--comprobar-ventana' -Wait -PassThru
+          Get-Content "$env:LOCALAPPDATA/GestorHorarios-datos/comprobacion-ventana.json" -ErrorAction SilentlyContinue
+          if ($proceso.ExitCode -ne 0) { throw "Falló la ventana real; no se publica." }
 
       - name: Publicar en la versión de GitHub
         uses: softprops/action-gh-release@v2

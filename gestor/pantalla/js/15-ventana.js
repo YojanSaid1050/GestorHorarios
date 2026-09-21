@@ -58,7 +58,7 @@ async function encenderBarraDeVentana() {
     if (!apiVentana || typeof apiVentana.barra_propia !== 'function') return;
     let propia = false;
     try {
-        propia = await apiVentana.barra_propia();
+        propia = await conTopeDeEspera(() => apiVentana.barra_propia(), 3);
     } catch (e) {
         console.warn('[ventana] no se pudo saber con qué barra se abrió:', e);
         return;

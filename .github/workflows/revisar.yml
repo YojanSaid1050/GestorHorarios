@@ -1,0 +1,45 @@
+name: Revisar refactorización e instalador
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Preparar herramientas
+        run: |
+          python -m pip install -r requisitos.txt pyinstaller
+          dotnet tool install -g vpk
+          choco install innosetup --version=6.7.3 --yes --no-progress
+      - name: Revisar código y funciones
+        run: |
+          python -m ruff check gestor empaquetado pruebas qa
+          python -m pytest --lentas -v --durations=15
+      - name: Construir el instalador de revisión con datos de ejemplo
+        run: python empaquetado/construir.py
+      - name: Abrir WebView2 y probar el puente del ejecutable real
+        shell: pwsh
+        run: |
+          $proceso = Start-Process -FilePath '.\dist\GestorHorarios\GestorHorarios.exe' -ArgumentList '--comprobar-ventana' -Wait -PassThru
+          if ($proceso.ExitCode -ne 0) { throw "Falló la comprobación nativa: $($proceso.ExitCode)" }
+      - name: Conservar diagnóstico nativo
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/diagnostico | Out-Null
+          Copy-Item "$env:LOCALAPPDATA/GestorHorarios-datos/comprobacion-ventana.*" dist/diagnostico/ -ErrorAction SilentlyContinue
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: GestorHorarios-revision-Windows
+          path: |
+            dist/instalador/
+            dist/diagnostico/
+          retention-days: 7

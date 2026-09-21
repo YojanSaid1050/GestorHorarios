@@ -99,8 +99,8 @@ def test_el_javascript_llama_a_los_nombres_que_el_puente_tiene():
     visible: `window.pywebview.api.lo_que_sea` es `undefined` y llamarlo revienta
     dentro del manejador del clic, donde nadie mira.
     """
-    codigo = (RAIZ / 'gestor' / 'pantalla' / 'js' / '15-ventana.js').read_text(
-        encoding='utf-8')
+    codigo = '\n'.join((RAIZ / 'gestor' / 'pantalla' / 'js' / nombre).read_text(
+        encoding='utf-8') for nombre in ('15-ventana.js', '14a-credenciales.js'))
     publicos = {m for m in dir(escritorio.Puente)
                 if not m.startswith('_') and callable(getattr(escritorio.Puente, m))}
     for nombre in publicos:
@@ -142,7 +142,7 @@ def test_redimensionar_no_baja_del_minimo(base):
             pedidos.append((ancho, alto))
 
     puente = escritorio.Puente()
-    puente.ventana = VentanaQueMide()
+    puente._ventana = VentanaQueMide()
     assert puente.redimensionar(300, 200) is True
     assert pedidos == [(marco.ANCHO_MINIMO, marco.ALTO_MINIMO)]
 
@@ -182,7 +182,7 @@ def test_el_puente_no_revienta_si_la_ventana_no_sabe_hacer_algo():
         pass
 
     puente = escritorio.Puente()
-    puente.ventana = VentanaSorda()
+    puente._ventana = VentanaSorda()
     assert puente.minimizar() is False
     assert puente.cerrar() is False
 
@@ -199,7 +199,7 @@ def test_el_botón_del_medio_alterna(base):
             hechos.append('restaurar')
 
     puente = escritorio.Puente()
-    puente.ventana = VentanaDeMentira()
+    puente._ventana = VentanaDeMentira()
 
     assert puente.esta_maximizada() is False
     puente.maximizar_o_restaurar()
@@ -216,7 +216,7 @@ def test_si_maximizar_falla_el_estado_no_se_mueve(base):
             raise RuntimeError('no se pudo')
 
     puente = escritorio.Puente()
-    puente.ventana = VentanaQueFalla()
+    puente._ventana = VentanaQueFalla()
     assert puente.maximizar_o_restaurar() is False
     assert puente.esta_maximizada() is False
 
@@ -262,7 +262,8 @@ def test_lo_que_la_pantalla_puede_pedir_está_en_castellano():
     publicos = {m for m in dir(escritorio.Puente)
                 if not m.startswith('_') and callable(getattr(escritorio.Puente, m))}
     assert publicos == {'minimizar', 'maximizar_o_restaurar', 'esta_maximizada',
-                        'cerrar', 'barra_propia', 'redimensionar'}, publicos
+                        'cerrar', 'barra_propia', 'redimensionar',
+                        'leer_clave', 'guardar_clave', 'olvidar_clave'}, publicos
 
 
 # ------------------------------------------- sin pantallas no se adivina

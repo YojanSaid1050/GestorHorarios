@@ -35,11 +35,11 @@ RAIZ = Path(__file__).resolve().parents[1]
 if str(RAIZ) not in sys.path:
     sys.path.insert(0, str(RAIZ))
 
-from qa.servidor import Servidor, entrar_como_admin  # noqa: E402
+from qa.navegador import abrir as abrir_navegador  # noqa: E402
+from qa.servidor import CLAVE_ADMIN_QA, Servidor, entrar_como_admin  # noqa: E402
 from qa.uso import App  # noqa: E402
 
-NAVEGADOR = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
-CLAVE_ADMIN = 'xYojanSaidx1050'
+CLAVE_ADMIN = CLAVE_ADMIN_QA
 
 PESTANAS = ['personal', 'solicitudes', 'requerimientos', 'horario', 'modificar',
             'validacion', 'historial', 'configuracion']
@@ -701,8 +701,9 @@ def lo_que_destruye(app, acta, servidor, cabeceras) -> set:
         estado, _ = servidor.pedir(f"/api/empleados/{victima['id']}/retirar", 'POST',
                                    {'fecha_retiro': '2026-10-05'}, sesion.cabeceras)
         acta.comprobar(estado == 200
-                       and len(sesion.lista('/api/empleados')) == len(personal_antes) - 1,
-                       'se retira a alguien para tener algo que recuperar',
+                       and any(e['id'] == victima['id'] and e.get('retirado_desde') == '2026-10-05'
+                               for e in sesion.lista('/api/empleados?incluir_inactivos=true')),
+                       'se registra una retirada futura para tener algo que recuperar',
                        f'la retirada contestó {estado}')
 
         copia = servidor.carpeta / 'copias' / next(iter(nuevas))
@@ -714,7 +715,9 @@ def lo_que_destruye(app, acta, servidor, cabeceras) -> set:
                        'restaurar la copia deja el personal como estaba',
                        f'{len(personal_antes)} antes · {len(vuelto)} después · '
                        f'{app.toast()[:140]}')
-        acta.comprobar(any(e['id'] == victima['id'] for e in vuelto),
+        acta.comprobar(any(e['id'] == victima['id']
+                           and e.get('retirado_desde') == victima.get('retirado_desde')
+                           for e in vuelto),
                        'y deshace la retirada: vuelve en activo, no como un hueco',
                        victima['nombre'])
 
@@ -839,8 +842,7 @@ def main() -> int:
     with Servidor('/tmp/qa_interfaz') as servidor:
         cabeceras = entrar_como_admin(servidor)
         with sync_playwright() as guion:
-            navegador = guion.chromium.launch(
-                executable_path=NAVEGADOR, args=['--no-sandbox'])
+            navegador = abrir_navegador(guion)
             pagina = navegador.new_page(viewport={'width': 1500, 'height': 1000})
             app = App(pagina)
             App.acta = acta

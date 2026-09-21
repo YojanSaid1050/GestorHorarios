@@ -328,7 +328,7 @@ async function cargarModoApp() {
     // Se aplica lo guardado antes de pintar nada más: así no se ve un
     // parpadeo en claro antes de que la aplicación se ponga oscura.
     try {
-        const data = await api('/api/configuracion/modo-app');
+        const data = await leerAlArrancar('/api/configuracion/modo-app');
         aplicarModoApp(data.modo || 'sistema');
     } catch (_) {
         aplicarModoApp('sistema');
@@ -361,7 +361,7 @@ function conectarSelectorDeModo() {
 }
 
 async function cargarTemaApp() {
-    const data = await api('/api/configuracion/tema-app');
+    const data = await leerAlArrancar('/api/configuracion/tema-app');
     temasAppDisponibles = data.opciones || [];
     const select = $('tema-app');
     if (select) {

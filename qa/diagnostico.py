@@ -14,10 +14,10 @@ RAIZ = Path(__file__).resolve().parents[1]
 if str(RAIZ) not in sys.path:
     sys.path.insert(0, str(RAIZ))
 
-from qa.servidor import Servidor  # noqa: E402
+from qa.navegador import abrir as abrir_navegador  # noqa: E402
+from qa.servidor import Servidor, entrar_como_admin  # noqa: E402
 from qa.uso import App  # noqa: E402
 
-NAVEGADOR = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
 CAPTURAS = Path('/tmp/qa_capturas')
 
 
@@ -33,10 +33,10 @@ def main() -> int:
 
     CAPTURAS.mkdir(parents=True, exist_ok=True)
     with Servidor('/tmp/qa_diagnostico') as servidor:
+        entrar_como_admin(servidor)
         print(f'servidor: {servidor.base}', flush=True)
         with sync_playwright() as guion:
-            navegador = guion.chromium.launch(executable_path=NAVEGADOR,
-                                              args=['--no-sandbox'])
+            navegador = abrir_navegador(guion)
             pagina = navegador.new_page(viewport={'width': 1600, 'height': 1000})
             app = App(pagina)
             print('entrar:', app.entrar(servidor.base), flush=True)

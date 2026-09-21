@@ -20,6 +20,8 @@ sitio la primera vez que se abre.
 """
 from pathlib import Path
 
+from PyInstaller.utils.hooks import copy_metadata
+
 RAIZ = Path(SPECPATH).resolve().parent
 
 # ---------------------------------------------------------------------------
@@ -47,6 +49,7 @@ a = Analysis(
     pathex=[str(RAIZ)],
     binaries=[],
     datas=[
+        *copy_metadata('pywebview'),
         (str(RAIZ / 'gestor' / 'pantalla'), 'gestor/pantalla'),
         (str(RAIZ / 'datos_iniciales'), 'datos_iniciales'),
     ],

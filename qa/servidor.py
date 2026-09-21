@@ -104,10 +104,26 @@ class Servidor:
                 return fallo.code, {'detail': cuerpo_error.decode('utf-8', 'replace')}
 
 
+CLAVE_ADMIN_QA = 'RevisionLocal-934!'
+
+
 def entrar_como_admin(servidor: Servidor) -> dict:
-    """Las cabeceras de una sesión de administrador."""
+    """Preparar una cuenta de pruebas mediante el flujo real de cambio de clave."""
     estado, datos = servidor.pedir('/api/auth/login', 'POST',
-                                   {'usuario': 'admin', 'password': 'xYojanSaidx1050'})
+                                   {'usuario': 'admin', 'password': CLAVE_ADMIN_QA})
+    if estado != 200:
+        estado, datos = servidor.pedir('/api/auth/login', 'POST',
+                                       {'usuario': 'admin', 'password': 'xYojanSaidx1050'})
+        if estado != 200:
+            raise RuntimeError(f'No se pudo preparar la cuenta de pruebas: {datos}')
+        cabeceras = {'X-Session-Token': datos['token']}
+        estado, datos = servidor.pedir('/api/auth/password', 'PUT',
+                                       {'actual': 'xYojanSaidx1050', 'nueva': CLAVE_ADMIN_QA},
+                                       cabeceras)
+        if estado != 200:
+            raise RuntimeError(f'No se pudo cambiar la clave de la cuenta de pruebas: {datos}')
+        estado, datos = servidor.pedir('/api/auth/login', 'POST',
+                                       {'usuario': 'admin', 'password': CLAVE_ADMIN_QA})
     if estado != 200:
         raise RuntimeError(f'No se pudo entrar: {datos}')
     return {'X-Session-Token': datos['token']}

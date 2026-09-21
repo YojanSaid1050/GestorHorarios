@@ -281,8 +281,33 @@ def empaquetar() -> None:
             '--mainExe', nombre_del_ejecutable(),
             '--packTitle', version.NOMBRE,
             '--packAuthors', version.AUTOR,
+            '--icon', str(RAIZ / 'empaquetado' / 'icono.ico'),
+            '--framework', 'webview2',
+            '--shortcuts', 'StartMenuRoot',
             '--outputDir', str(PAQUETES)])
-    print(f'Instalador y paquete de actualización en {PAQUETES}')
+    construir_asistente()
+    print(f'Instalador guiado y paquete de actualización en {PAQUETES}')
+
+
+def construir_asistente() -> None:
+    """Una interfaz nativa de Windows; Velopack conserva el mantenimiento."""
+    compilador = shutil.which('ISCC') or str(
+        Path(os.environ.get('PROGRAMFILES(X86)', 'C:/Program Files (x86)'))
+        / 'Inno Setup 6' / 'ISCC.exe')
+    if not Path(compilador).is_file():
+        raise SystemExit('Instala Inno Setup 6.6 o posterior para construir el asistente.')
+    candidatos = list(PAQUETES.glob('*Setup.exe'))
+    if len(candidatos) != 1:
+        raise SystemExit('Se esperaba un único Setup de Velopack. Limpia dist/instalador.')
+    base = candidatos[0]
+    correr([compilador, f'/DVersionApp={version.VERSION}',
+            f'/DInstaladorBase={base}', str(RAIZ / 'empaquetado' / 'asistente.iss')])
+    final = PAQUETES / f'GestorHorarios-Instalar-{version.VERSION}.exe'
+    if not final.is_file():
+        raise SystemExit('Inno Setup terminó sin dejar el asistente esperado.')
+    # Conservar un único instalador visible. El motor ya quedó embebido en él;
+    # los nupkg y el manifiesto de actualización permanecen intactos.
+    base.unlink()
 
 
 def main() -> int:

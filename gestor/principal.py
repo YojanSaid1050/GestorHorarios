@@ -23,12 +23,22 @@ from __future__ import annotations
 
 import ctypes
 import os
-import socket
 import sys
-import threading
 import time
 
 from gestor import rutas, version
+from gestor.servidor_local import (
+    HOST as HOST,
+)
+from gestor.servidor_local import (
+    ServidorLocal,
+)
+from gestor.servidor_local import (
+    esperar_al_servidor as esperar_al_servidor,
+)
+from gestor.servidor_local import (
+    puerto_libre as puerto_libre,
+)
 
 #: Solo una copia a la vez. El nombre lleva la versión fuera a propósito: si la
 #: llevara dentro, una versión nueva podría abrirse encima de una vieja y las
@@ -36,7 +46,6 @@ from gestor import rutas, version
 MUTEX = r'Local\GestorHorarios_InstanciaUnica'
 _YA_EXISTE = 183
 
-HOST = '127.0.0.1'
 
 
 def _con_salida_aunque_no_haya_consola() -> None:
@@ -127,43 +136,10 @@ def avisar(texto: str, titulo: str = version.NOMBRE, error: bool = False) -> Non
     print(f'{titulo}: {texto}', file=sys.stderr)
 
 
-def puerto_libre() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sonda:
-        sonda.bind((HOST, 0))
-        return int(sonda.getsockname()[1])
 
 
-def esperar_al_servidor(puerto: int, segundos: float = 30.0) -> bool:
-    limite = time.time() + segundos
-    while time.time() < limite:
-        try:
-            with socket.create_connection((HOST, puerto), timeout=0.3):
-                return True
-        except OSError:
-            time.sleep(0.1)
-    return False
 
 
-def _arrancar_servidor(puerto: int):
-    import uvicorn
-
-    from gestor.web.aplicacion import app
-
-    # `log_config=None` para que uvicorn **no toque el registro**.
-    #
-    # Su configuración por defecto pregunta `sys.stdout.isatty()` al construir el
-    # formateador, y en el programa instalado —que se abre sin consola— eso
-    # tumbaba el arranque entero con «Unable to configure formatter "default"».
-    # Además esta aplicación ya tiene su propio registro, que escribe en un
-    # archivo dentro de la carpeta de datos; dejar que uvicorn montara el suyo
-    # encima era duplicarlo y, de paso, la única razón por la que le importaba
-    # si había una consola.
-    configuracion = uvicorn.Config(app, host=HOST, port=puerto, log_level='warning',
-                                   access_log=False, log_config=None)
-    servidor = uvicorn.Server(configuracion)
-    hilo = threading.Thread(target=servidor.run, name='servidor', daemon=True)
-    hilo.start()
-    return servidor
 
 
 def _velopack() -> None:
@@ -197,78 +173,61 @@ def _velopack() -> None:
         obtener().exception('Velopack no pudo procesar el arranque')
 
 
+def _abrir_ventana(url: str) -> None:
+    from gestor import diagnostico_ventana, escritorio
+    from gestor.servicios import ventana as servicio_ventana
+
+    try:
+        import webview
+    except ImportError:
+        avisar(f'Abre {version.NOMBRE} en el navegador: {url}')
+        while True:
+            time.sleep(0.5)
+
+    diagnostico = '--diagnostico-ventana' in sys.argv[1:]
+    segura = '--ventana-segura' in sys.argv[1:]
+    sin_puente = '--sin-puente' in sys.argv[1:]
+    ventana, _puente = escritorio.crear(
+        url, f'{version.NOMBRE} {version.VERSION}',
+        segura=segura or sin_puente, sin_puente=sin_puente)
+    diagnostico_ventana.conectar(ventana)
+    servicio_ventana.registrar(ventana)
+    try:
+        with diagnostico_ventana.pilas_si_se_bloquea(diagnostico):
+            webview.start(debug=diagnostico,
+                          gui='edgechromium' if sys.platform == 'win32' else None)
+    finally:
+        servicio_ventana.registrar(None)
+
+
 def abrir() -> int:
     _velopack()
-
     unica = UnaSolaCopia()
     if not unica.conseguida():
         avisar('El Gestor de Horarios ya está abierto. Busca su ventana en la barra '
                'de tareas.')
         return 0
-
     try:
         rutas.preparar()
-    except Exception as exc:                                       # noqa: BLE001
-        avisar(f'No se pudo preparar la carpeta de datos en {rutas.RAIZ_DATOS}: {exc}',
-               error=True)
-        return 1
-
-    puerto = puerto_libre()
-    servidor = _arrancar_servidor(puerto)
-    if not esperar_al_servidor(puerto):
-        avisar('El programa no llegó a arrancar. Vuelve a abrirlo; si sigue igual, '
-               f'mira el registro en {rutas.REGISTRO}.', error=True)
-        return 1
-
-    try:
-        import webview  # noqa: PLC0415
-    except ImportError:
-        # Sin ventana la aplicación sigue siendo usable desde el navegador. Es
-        # lo que permite mirar algo desde otro equipo de la oficina.
-        avisar(f'Abre {version.NOMBRE} en el navegador: http://{HOST}:{puerto}')
-        try:
-            while True:
-                time.sleep(3600)
-        except KeyboardInterrupt:
-            return 0
-
-    from gestor import escritorio
-    from gestor.servicios import ventana as servicio_ventana
-
-    ventana, _puente = escritorio.crear(
-        f'http://{HOST}:{puerto}', f'{version.NOMBRE} {version.VERSION}')
-    servicio_ventana.registrar(ventana)
-    try:
-        webview.start()
+        with ServidorLocal() as servidor:
+            _abrir_ventana(servidor.url)
+    except KeyboardInterrupt:
+        return 0
     finally:
-        servidor.should_exit = True
-        servicio_ventana.registrar(None)
+        # También al fallar los datos, el servidor o create_window, antes de start().
         unica.soltar()
     return 0
 
 
 def _solo_el_servidor() -> int:
-    """Levantar el servidor y nada más. Sin ventana y sin candado.
-
-    Lo usa la autocomprobación, que arranca **otro proceso** de este mismo
-    ejecutable para averiguar si arranca partiendo de cero. Sin candado a
-    propósito: la copia que está comprobando puede estar abierta, y bloquearse a
-    sí misma sería el único resultado que esta comprobación no puede permitirse.
-    La carpeta de datos la fija quien llama, con `GESTOR_DATOS`.
-    """
-    puerto = int(os.environ.get('GESTOR_PUERTO') or 0) or puerto_libre()
+    """Modo de diagnóstico sin ventana. Cerrar el proceso termina el servidor."""
+    puerto = int(os.environ.get('GESTOR_PUERTO') or 0)
+    rutas.preparar()
     try:
-        rutas.preparar()
-    except Exception as exc:                                       # noqa: BLE001
-        print(f'No se pudo preparar {rutas.RAIZ_DATOS}: {exc}', file=sys.stderr)
-        return 1
-    servidor = _arrancar_servidor(puerto)
-    if not esperar_al_servidor(puerto):
-        return 1
-    print(f'servidor en http://{HOST}:{puerto}', flush=True)
-    try:
-        while not servidor.should_exit:
-            time.sleep(0.5)
+        with ServidorLocal(puerto=puerto) as servidor:
+            print(f'servidor en {servidor.url}', flush=True)
+            while servidor.hilo.is_alive():
+                time.sleep(0.5)
     except KeyboardInterrupt:
         pass
     return 0
@@ -298,6 +257,12 @@ def main() -> int:
     # Estas dos banderas van **después** de `_velopack()` en `abrir()`, pero se
     # leen antes de cualquier cosa porque ninguna de las dos quiere ventana.
     # Velopack usa argumentos que empiezan por `--veloapp-`, así que no chocan.
+    if '--comprobar-ventana' in sys.argv[1:]:
+        from gestor.sonda_ventana import comprobar
+        return comprobar()
+    if '--sonda-ventana' in sys.argv[1:]:
+        from gestor.sonda_ventana import ejecutar
+        return ejecutar()
     if '--comprobar' in sys.argv[1:]:
         from gestor.autocomprobacion import comprobar
         return comprobar()

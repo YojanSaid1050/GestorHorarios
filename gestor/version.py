@@ -16,7 +16,7 @@ comprueba que no ha vuelto a aparecer escrita a mano en ningún otro sitio.
 from __future__ import annotations
 
 NOMBRE = 'Gestor de Horarios'
-VERSION = '4.2.1'
+VERSION = '4.3.0'
 AUTOR = 'xYojanSaidx'
 
 #: El identificador del producto para Velopack y para Windows. No cambia nunca:
