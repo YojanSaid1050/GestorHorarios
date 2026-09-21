@@ -88,6 +88,9 @@ jobs:
         shell: pwsh
         timeout-minutes: 5
         run: ./empaquetado/preparar_inno.ps1
+      - name: Compilar el asistente antes de construir la aplicación
+        timeout-minutes: 3
+        run: python -m empaquetado.comprobar_sintaxis_inno
 
       - name: Comprobar que la plantilla de la oficina está puesta
         # El repositorio es público, así que lo que hay escrito en él son

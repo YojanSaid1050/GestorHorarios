@@ -43,3 +43,14 @@ def test_prueba_nativa_no_instala_en_un_equipo_de_usuario(monkeypatch):
     monkeypatch.setattr(comprobar_instalador, 'probar',
                         lambda *_: pytest.fail('No debe instalar fuera del runner.'))
     assert comprobar_instalador.main() == 2
+
+
+@pytest.mark.parametrize('nombre', ['asistente.iss', 'destino_seguro.iss'])
+def test_los_comentarios_del_codigo_usan_sintaxis_pascal(nombre):
+    texto = (RAIZ / 'empaquetado' / nombre).read_text(encoding='utf-8-sig')
+    if nombre == 'asistente.iss':
+        texto = texto.split('[Code]', 1)[1]
+    incorrectas = [numero for numero, linea in enumerate(texto.splitlines(), 1)
+                   if linea.lstrip().startswith(';')]
+    assert not incorrectas, (
+        f'{nombre}: comentarios de Inno dentro de Pascal en líneas {incorrectas}; usar //')

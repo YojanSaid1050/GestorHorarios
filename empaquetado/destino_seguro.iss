@@ -1,5 +1,5 @@
-﻿; Se valida antes de invocar Velopack: en modo silencioso puede reemplazar
-; una carpeta ocupada y cerrar todos los procesos situados dentro de ella.
+﻿// Se valida antes de invocar Velopack: en modo silencioso puede reemplazar
+// una carpeta ocupada y cerrar todos los procesos situados dentro de ella.
 function AtributosRuta(Nombre: String): LongWord;
   external 'GetFileAttributesW@kernel32.dll stdcall setuponly';
 

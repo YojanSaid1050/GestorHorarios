@@ -21,6 +21,9 @@ jobs:
         shell: pwsh
         timeout-minutes: 5
         run: ./empaquetado/preparar_inno.ps1
+      - name: Compilar el asistente antes de construir la aplicación
+        timeout-minutes: 3
+        run: python -m empaquetado.comprobar_sintaxis_inno
       - name: Revisar el código con Ruff
         run: python -m ruff check gestor empaquetado pruebas qa
       - name: Probar las funciones
