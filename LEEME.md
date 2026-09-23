@@ -5,7 +5,8 @@ Programación de turnos por semanas completas para una oficina de tres áreas
 se abre como un programa de escritorio y guarda todo en el equipo: no hay
 servidor al que conectarse ni cuenta que crear fuera.
 
-Versión **4.3.0 candidata**. Instrucciones de revisión: [guía de Windows](docs/SOLUCION_WINDOWS.md).
+Versión **4.3.2**. Construcción y recuperación de datos: [entrega de Windows](docs/ENTREGA_WINDOWS.md).
+Diagnóstico y aceptación manual: [guía de Windows](docs/SOLUCION_WINDOWS.md).
 Arquitectura y alcance: [refactorización](docs/ARQUITECTURA.md). Todo —código, comentarios, pruebas y pantalla— está escrito
 en castellano, a propósito: lo mantiene y lo lee gente que trabaja en castellano.
 
@@ -155,7 +156,7 @@ inventada**: sirve para clonar el proyecto y verlo funcionar, y no dice nada de
 nadie. Ninguno de esos nombres comparte una sola palabra con los reales.
 
 La plantilla de verdad viaja en el secreto `GESTOR_NOMINA` del repositorio y se
-aplica al construir, así que el instalador que llega a la oficina sigue trayendo
+aplica al construir. Si falta, la construcción se detiene: no se entrega un instalador de ejemplo. La plantilla inicial no contiene las solicitudes ni los ajustes guardados posteriormente; ese trabajo se recupera restaurando la base anterior. Así, el instalador que llega a la oficina sigue trayendo
 su gente y sus dos meses base. Se prepara así, en el equipo donde esté la carpeta
 `nomina/` —que está en `.gitignore`—:
 

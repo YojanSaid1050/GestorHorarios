@@ -90,6 +90,7 @@ def test_una_asignación_masiva_con_alguien_que_no_existe_no_guarda_a_nadie(clie
         'empleado_ids': [gente[0]['id'], gente[1]['id'], 999_999],
         'alcance': 'todos',
         'requerimiento': {'empleado_id': gente[0]['id'], 'tipo': 'asignacion_administrativa',
+        'horario_administrativo': 'ADM-GS',
                           'fechas': ['2026-10-14']},
     })
     assert respuesta.status_code >= 400, respuesta.text
@@ -132,6 +133,7 @@ def test_cancelar_un_grupo_de_varias_áreas_las_marca_todas(cliente):
         'empleado_ids': [p['id'] for p in elegidas],
         'alcance': 'todos',
         'requerimiento': {'empleado_id': elegidas[0]['id'], 'tipo': 'asignacion_administrativa',
+        'horario_administrativo': 'ADM-GS',
                           'fechas': ['2026-10-14']},
     })
     assert creado.status_code == 200, creado.text

@@ -110,7 +110,7 @@ qué horario continúa vigente mientras se aprueba.
 2. Reproducir el caso sobre una copia de los datos afectados y registrar el resultado.
 3. Revisar instalación limpia y actualización 4.2.1 → 4.3.0, desinstalación con conservación de datos y escalado 100/125/150/200 %.
 4. El servidor local conserva el diseño existente; esto no equivale a una auditoría completa de seguridad o concurrencia.
-5. El empaquetado público conserva la política previa de plantilla de oficina. La entrega de revisión usa datos de ejemplo. Revisar esa política antes de publicar información real.
+5. El empaquetado público conserva la política previa de plantilla de oficina. La generación manual también exige la plantilla de oficina; las PR solo ejecutan comprobaciones sin empaquetar. Los datos sintéticos quedan limitados al desarrollo y las pruebas.
 6. Las llamadas posteriores al acceso y operaciones largas requieren una política global de cancelación y estado incierto; no se ha aplicado un reintento automático que pueda duplicar escrituras.
 7. Fijar también herramientas de construcción y dependencias transitivas en un archivo de bloqueo sería una mejora posterior.
 

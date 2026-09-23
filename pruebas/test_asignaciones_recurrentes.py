@@ -44,6 +44,7 @@ def test_una_recurrente_de_diciembre_no_aparece_en_octubre(cliente):
     persona = _alguien(cliente)
     creada = cliente.post('/api/requerimientos', json={
         'empleado_id': persona['id'], 'tipo': 'asignacion_administrativa',
+        'horario_administrativo': 'ADM-GS',
         'recurrente_indefinido': True, 'dias_semana': [2],
         'vigente_desde': '2026-12-01'})
     assert creada.status_code == 200, creada.text
@@ -72,6 +73,7 @@ def test_el_motor_recibe_que_la_asignación_se_repite(cliente):
     persona = _alguien(cliente)
     cliente.post('/api/requerimientos', json={
         'empleado_id': persona['id'], 'tipo': 'asignacion_administrativa',
+        'horario_administrativo': 'ADM-GS',
         'recurrente_indefinido': True, 'dias_semana': [2],
         'vigente_desde': '2026-10-01'})
 
@@ -97,11 +99,13 @@ def test_no_se_puede_guardar_lo_que_la_vista_previa_rechaza(cliente):
 
     previa = cliente.post('/api/requerimientos/prevalidar', json={
         'empleado_id': persona['id'], 'tipo': 'asignacion_administrativa',
+        'horario_administrativo': 'ADM-GS',
         'fechas': ['2026-10-14']})
     assert previa.json()['compatible'] is False
 
     guardar = cliente.post('/api/requerimientos', json={
         'empleado_id': persona['id'], 'tipo': 'asignacion_administrativa',
+        'horario_administrativo': 'ADM-GS',
         'fechas': ['2026-10-14']})
     assert guardar.status_code >= 400, (
         'se guardó una asignación que la vista previa acababa de rechazar')
@@ -116,11 +120,13 @@ def test_dos_asignaciones_de_la_misma_persona_el_mismo_día_chocan(cliente):
     persona = _alguien(cliente)
     primera = cliente.post('/api/requerimientos', json={
         'empleado_id': persona['id'], 'tipo': 'asignacion_administrativa',
+        'horario_administrativo': 'ADM-GS',
         'fechas': ['2026-10-14']})
     assert primera.status_code == 200, primera.text
 
     segunda = cliente.post('/api/requerimientos', json={
         'empleado_id': persona['id'], 'tipo': 'actividad',
+        'horario_administrativo': 'ADM-GS',
         'fechas': ['2026-10-14']})
     assert segunda.status_code >= 400
     assert 'ya tiene otra asignación' in segunda.text
@@ -138,6 +144,7 @@ def test_una_asignación_no_entra_en_una_semana_cerrada(cliente):
 
     respuesta = cliente.post('/api/requerimientos', json={
         'empleado_id': persona['id'], 'tipo': 'asignacion_administrativa',
+        'horario_administrativo': 'ADM-GS',
         'fechas': ['2026-10-14']})
     assert respuesta.status_code >= 400
     assert 'semana cerrada' in respuesta.text
@@ -195,3 +202,16 @@ def test_una_recurrencia_abierta_choca_con_lo_que_caiga_en_uno_de_sus_días(clie
     assert choca.status_code >= 400, (
         'se aprobaron dos novedades para el mismo martes')
     assert '2026-10-20' in choca.text
+
+
+@pytest.mark.parametrize('tipo', ['asignacion_administrativa', 'actividad'])
+@pytest.mark.parametrize('horario', [None, '', 'INVENTADO'])
+def test_no_guarda_una_asignacion_sin_horario_compatible(cliente, tipo, horario):
+    persona = _alguien(cliente)
+    antes = cliente.get('/api/requerimientos').json()
+    respuesta = cliente.post('/api/requerimientos', json={
+        'empleado_id': persona['id'], 'tipo': tipo,
+        'fechas': ['2026-10-20'], 'horario_administrativo': horario})
+    assert respuesta.status_code == 422
+    assert 'Elige un horario compatible' in respuesta.text
+    assert cliente.get('/api/requerimientos').json() == antes

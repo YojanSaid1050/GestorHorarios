@@ -35,6 +35,7 @@ NOMBRES = {
 }
 
 TRADUCCIONES = {
+    'horario_asignacion': 'elige un horario compatible para la asignación',
     'missing': 'falta {campo}',
     'int_parsing': '{campo} tiene que ser un número entero',
     'float_parsing': '{campo} tiene que ser un número',

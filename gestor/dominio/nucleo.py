@@ -198,7 +198,9 @@ def _tope_absoluto(horario: list[dict]) -> list[str]:
                 racha += 1
                 if racha == 1:
                     desde = d['fecha']
-                if racha > peor:
+                # El tope limita decisiones nuevas, no reescribe las bases
+                # manuales. Los días históricos sí cuentan si la racha continúa.
+                if racha > peor and not str(d.get('origen') or '').startswith('base_'):
                     peor, peor_desde = racha, desde
             else:
                 racha = 0

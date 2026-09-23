@@ -279,9 +279,13 @@ def test_la_plantilla_de_verdad_se_escribe_donde_el_programa_la_busca(
         'nombre\nQuien Trabaja Aqui\n', encoding='utf-8')
     (real / 'datos_iniciales' / 'reglas_internas.json').write_text(
         '[]', encoding='utf-8')
+    for mes in ('agosto', 'septiembre'):
+        (real / 'datos_iniciales' / f'base_{mes}_2026.json').write_text('{}', encoding='utf-8')
 
     salida = tmp_path / 'GestorHorarios'
-    (salida / '_internal').mkdir(parents=True)
+    (salida / '_internal' / 'datos_iniciales').mkdir(parents=True)
+    resto = salida / '_internal' / 'datos_iniciales' / 'exportaciones_registradas.json'
+    resto.write_text('["exportacion-de-prueba.xlsx"]', encoding='utf-8')
     monkeypatch.setattr(construir, 'SALIDA', salida)
     monkeypatch.setenv(plantilla.VARIABLE, plantilla.empaquetar(real))
 
@@ -289,14 +293,12 @@ def test_la_plantilla_de_verdad_se_escribe_donde_el_programa_la_busca(
     puesta = salida / '_internal' / 'datos_iniciales' / 'empleados_iniciales.csv'
     assert puesta.is_file(), 'la plantilla no quedó donde el programa la busca'
     assert 'Quien Trabaja Aqui' in puesta.read_text(encoding='utf-8')
+    assert not resto.exists(), 'no deben sobrevivir datos iniciales de pruebas'
 
 
-def test_sin_el_secreto_se_construye_igual_pero_se_dice(tmp_path, monkeypatch, capsys):
-    """Quien clone el proyecto tiene que poder compilarlo sin pedir nada a nadie.
+def test_sin_el_secreto_no_se_construye_un_instalador_ficticio(tmp_path, monkeypatch):
+    """La falta de plantilla privada debe detener la entrega, no generar un demo."""
 
-    Y aun así hay que decirlo: ese instalador arranca perfectamente y no sirve
-    para la oficina.
-    """
     import sys as _sys
 
     _sys.path.insert(0, str(RAIZ / 'empaquetado'))
@@ -308,8 +310,11 @@ def test_sin_el_secreto_se_construye_igual_pero_se_dice(tmp_path, monkeypatch, c
     monkeypatch.setattr(construir, 'SALIDA', salida)
     monkeypatch.delenv(plantilla.VARIABLE, raising=False)
 
-    assert construir.poner_la_plantilla_de_la_oficina() is False
-    assert 'plantilla inventada' in capsys.readouterr().err
+    with pytest.raises(SystemExit, match='Falta GESTOR_NOMINA'):
+        construir.poner_la_plantilla_de_la_oficina()
+    monkeypatch.setattr(construir, 'correr', lambda *_: pytest.fail('No debe ejecutar vpk.'))
+    with pytest.raises(SystemExit, match='Falta GESTOR_NOMINA'):
+        construir.empaquetar()
 
 
 def test_la_plantilla_no_puede_colar_archivos_que_no_se_esperan(tmp_path):
@@ -607,3 +612,31 @@ def test_la_autocomprobacion_pasa_de_verdad(carpeta_de_datos):
     assert comprobar() == 0, (
         'la autocomprobación no pasa, así que el empaquetado se pararía y no se '
         'publicaría nada. Lo de arriba dice qué comprobación falla.')
+
+
+@pytest.mark.parametrize('ejemplo', [False, True])
+def test_no_se_mezcla_una_plantilla_incompleta_o_de_ejemplo(tmp_path, monkeypatch, ejemplo):
+    import sys as _sys
+
+    _sys.path.insert(0, str(RAIZ / 'empaquetado'))
+    import construir
+    import plantilla
+
+    real = tmp_path / 'nomina' / 'datos_iniciales'
+    real.mkdir(parents=True)
+    contenido = ((RAIZ / 'datos_iniciales' / 'empleados_iniciales.csv').read_bytes()
+                 if ejemplo else b'nombre\nPersona de la oficina\n')
+    (real / 'empleados_iniciales.csv').write_bytes(contenido)
+    if ejemplo:
+        for mes in ('agosto', 'septiembre'):
+            (real / f'base_{mes}_2026.json').write_text('{}', encoding='utf-8')
+    salida = tmp_path / 'programa'
+    originales = salida / '_internal' / 'datos_iniciales'
+    originales.mkdir(parents=True)
+    testigo = originales / 'conservar.txt'
+    testigo.write_text('estado previo', encoding='utf-8')
+    monkeypatch.setattr(construir, 'SALIDA', salida)
+    monkeypatch.setenv(plantilla.VARIABLE, plantilla.empaquetar(real.parent))
+    with pytest.raises(SystemExit, match='personal de ejemplo' if ejemplo else 'incompleta'):
+        construir.poner_la_plantilla_de_la_oficina()
+    assert testigo.read_text(encoding='utf-8') == 'estado previo'

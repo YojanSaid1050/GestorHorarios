@@ -61,7 +61,7 @@ def _es_heredado(*dias):
     informa igual —callarlo fue el error de la versión anterior— pero marcado,
     para no reprocharle al mes nuevo algo que no decidió.
     """
-    return all(str(d.get('origen') or '').startswith('base_') or d.get('bloqueado')
+    return all(str(d.get('origen') or '').startswith('base_') or d.get('heredado')
                for d in dias if d)
 
 
@@ -237,7 +237,9 @@ def auditar(horario, reglas_area, festivos_conocidos=None):
                 d2 = date.fromisoformat(siguiente['fecha'])
                 if (d2 - d1).days == 1:
                     anotar('transición PM → AM',
-                           f"{f['nombre']}: PM el {previo['fecha']} y AM el {siguiente['fecha']}")
+                           f"{f['nombre']}: PM el {previo['fecha']} y AM el {siguiente['fecha']}",
+                           all(str(d.get('origen') or '').startswith('base_')
+                               for d in (previo, siguiente)))
 
     # ---------- 6. Parejas de PC nunca en el mismo turno ----------
     por_id = {int(f['empleado_id']): f for f in horario}

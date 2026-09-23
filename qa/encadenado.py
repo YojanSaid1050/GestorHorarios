@@ -115,7 +115,7 @@ def main() -> int:
             print()
 
     print(f'{limpios}/{len(MESES)} meses sin ningún incumplimiento propio.')
-    if fallos:
+    if fallos or limpios != len(MESES):
         print(f'\n{len(fallos)} incumplimiento(s) en total:')
         for norma, texto in fallos[:25]:
             print(f'  · {norma}: {texto}')

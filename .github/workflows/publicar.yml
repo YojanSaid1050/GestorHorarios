@@ -14,16 +14,20 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
-    # Sin esto, algo que se queda esperando corre hasta el tope de GitHub —seis
-    # horas— gastando minutos y sin decir nada. Con el tope aquí, un cuelgue se
-    # convierte en un fallo con su registro a los veinticinco minutos.
-    timeout-minutes: 25
+    # Incluye compilación, comprobación nativa e instalación y reinstalación.
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
+      - name: Comprobar que existe la plantilla de la oficina
+        env:
+          GESTOR_NOMINA: ${{ secrets.GESTOR_NOMINA }}
+          GESTOR_BASE_SEPTIEMBRE: ${{ secrets.GESTOR_BASE_SEPTIEMBRE }}
+        run: python -c "from empaquetado.construir import exigir_plantilla_de_la_oficina; exigir_plantilla_de_la_oficina()"
 
       - name: Instalar dependencias
         run: python -m pip install -r requisitos.txt -r empaquetado/requisitos-construccion.txt
@@ -41,7 +45,7 @@ jobs:
         shell: pwsh
         run: |
           if ($env:GITHUB_REF_TYPE -ne 'tag') {
-            throw 'Publicar requiere una etiqueta vX.Y.Z. Para probar main usa el workflow de revisión.'
+            throw 'Publicar requiere una etiqueta vX.Y.Z. Para generar desde main usa «Generar versión final de Windows».'
           }
           $enElCodigo = python -c "from gestor.version import VERSION; print(VERSION)"
           if ($LASTEXITCODE -ne 0) { throw 'No se pudo leer la versión del programa.' }
@@ -66,7 +70,11 @@ jobs:
         # `-x` para en el primer fallo: aquí no interesa el listado completo,
         # interesa no gastar una máquina Windows en las cuatrocientas pruebas
         # que vienen después de la que ya falló.
-        run: python -m pytest --lentas -v -x --durations=15
+        run: python -m pytest --lentas -v -x --durations=15 --junitxml=dist/diagnostico/pruebas.xml
+
+      - name: Probar estrés y combinaciones por HTTP
+        timeout-minutes: 10
+        run: python qa/estres.py --meses 12 --escenarios 3 --lecturas 200
 
       - name: Enseñar dónde se quedó, si se quedó
         # Solo corre cuando el paso de arriba ha fallado. El tope por prueba deja
@@ -92,26 +100,10 @@ jobs:
         timeout-minutes: 3
         run: python -m empaquetado.comprobar_sintaxis_inno
 
-      - name: Comprobar que la plantilla de la oficina está puesta
-        # El repositorio es público, así que lo que hay escrito en él son
-        # dieciocho personas inventadas. La de verdad llega en este secreto. Sin
-        # él se construiría un instalador que arranca perfectamente y que la
-        # oficina no puede usar: sin su gente y sin sus dos meses base, que son
-        # el punto de partida del que cuelga todo lo demás.
-        shell: pwsh
-        env:
-          GESTOR_NOMINA: ${{ secrets.GESTOR_NOMINA }}
-          GESTOR_PERMISO: ${{ secrets.GESTOR_PERMISO }}
-        run: |
-          if (-not $env:GESTOR_NOMINA) {
-            Write-Error ("Falta el secreto GESTOR_NOMINA. Se publicaria un " +
-              "instalador con dieciocho personas inventadas dentro.")
-            exit 1
-          }
-
       - name: Crear el ejecutable y comprobar el servidor
         env:
           GESTOR_NOMINA: ${{ secrets.GESTOR_NOMINA }}
+          GESTOR_BASE_SEPTIEMBRE: ${{ secrets.GESTOR_BASE_SEPTIEMBRE }}
           GESTOR_PERMISO: ${{ secrets.GESTOR_PERMISO }}
         run: python empaquetado/construir.py --solo-exe
 
@@ -121,6 +113,9 @@ jobs:
         run: ./empaquetado/comprobar_ventana.ps1
 
       - name: Crear paquetes de Velopack y asistente de Inno Setup
+        env:
+          GESTOR_NOMINA: ${{ secrets.GESTOR_NOMINA }}
+          GESTOR_BASE_SEPTIEMBRE: ${{ secrets.GESTOR_BASE_SEPTIEMBRE }}
         run: python -c "from empaquetado.construir import empaquetar; empaquetar()"
 
       - name: Probar destinos e instalación real del asistente
@@ -141,3 +136,4 @@ jobs:
         with:
           files: dist/instalador/*
           generate_release_notes: true
+          fail_on_unmatched_files: true

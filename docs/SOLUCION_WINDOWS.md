@@ -1,4 +1,6 @@
-# Gestor de Horarios 4.3.1 candidata — instrucciones
+# Gestor de Horarios — diagnóstico y aceptación
+
+Para generar la versión vigente y recuperar datos anteriores, sigue [ENTREGA_WINDOWS.md](ENTREGA_WINDOWS.md). Las incidencias citadas al final son históricas.
 
 Esta entrega contiene el código completo refactorizado y el código del nuevo
 instalador. **No incluye un instalador `.exe` compilado ni una publicación nueva
@@ -43,7 +45,7 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe -m gestor.principal --diagnostico-ventana
 ```
 
-El título debe mostrar **4.3.1**. Si muestra 4.2.1 estás abriendo el programa
+El título debe mostrar **4.3.2**. Si muestra 4.2.1 estás abriendo el programa
 anterior. Comprueba que las cuentas aparecen, entra y revisa tu personal,
 solicitudes y último oficial. No uses todavía el acceso directo de la versión instalada.
 
@@ -124,7 +126,7 @@ En GitHub Actions la añade también al PATH de los pasos siguientes.
 Salida esperada:
 
 ```text
-dist\instalador\GestorHorarios-Instalar-4.3.1.exe
+dist\instalador\GestorHorarios-Instalar-4.3.2.exe
 ```
 
 El asistente incluye bienvenida, tema claro/oscuro según el sistema, estilo
@@ -137,8 +139,9 @@ En un equipo sin WebView2 hará falta conexión para obtenerlo. Los datos siguen
 separados del programa. El registro del motor de instalación está en
 `%LOCALAPPDATA%\GestorHorarios-datos\instalacion.log`.
 
-Sin `GESTOR_NOMINA`, el paquete lleva datos de ejemplo para una instalación nueva.
-No confundas esa plantilla de prueba con la plantilla de oficina. No incluyas
+Sin `GESTOR_NOMINA`, la construcción se detiene. Los datos de ejemplo solo se
+utilizan en desarrollo y pruebas. La plantilla real no sustituye a una copia
+de la base con las operaciones guardadas. No incluyas
 credenciales ni datos personales en el ZIP fuente ni en un repositorio público.
 
 ## 6. Aceptación antes de sustituir la versión de uso
@@ -171,11 +174,12 @@ No copies la base de prueba encima de la original como paso automático.
 El ZIP es una instantánea completa; no contiene `.git`. Con tus cambios actuales
 ya guardados en un commit, crea una rama nueva desde el `main` actualizado y
 compara/aplica esta instantánea. No sobrescribas trabajo tuyo sin revisar el diff.
-Esta corrección del workflow parte de `5e7a6cb`; si `main` avanzó, habrá que
+Esta corrección del workflow parte de `7f1107e`; si `main` avanzó, habrá que
 integrar esos cambios.
 
-El flujo **«Revisar refactorización e instalador»** se ejecuta en una PR o
-manualmente y prepara el artefacto Windows con datos de ejemplo. Primero ejecuta
+El flujo **«Generar versión final de Windows»** comprueba código y funciones
+en las PR, sin generar instaladores. Al ejecutarlo manualmente exige la plantilla
+real y prepara todos los paquetes Windows. Primero ejecuta
 la sonda de WebView2; solo si pasa construye el instalador. Después comprueba sus destinos, realiza
 una instalación y una reinstalación en el runner, y abre la ventana instalada.
 Solo adjunta el instalador si también pasa esta aceptación. El diagnóstico
@@ -184,7 +188,7 @@ no se ha ejecutado aquí en Windows.
 Si el runner no dispone de escritorio utilizable, conserva su diagnóstico y
 repite la prueba en un Windows interactivo antes de aceptar la versión.
 
-No crees la etiqueta `v4.3.1` hasta completar las comprobaciones: esa etiqueta
+No crees la etiqueta `v4.3.2` hasta completar las comprobaciones: esa etiqueta
 activa la publicación. La revisión actual no ha modificado tu GitHub.
 
 Consulta [ARQUITECTURA.md](ARQUITECTURA.md) para los cambios, límites y **funciones

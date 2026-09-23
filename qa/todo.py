@@ -30,6 +30,8 @@ RAIZ = Path(__file__).resolve().parents[1]
 TANDA = [
     ('el código está limpio', [sys.executable, '-m', 'ruff', 'check', '.']),
     ('las pruebas de Python', [sys.executable, '-m', 'pytest', '--lentas', '-q']),
+    ('estrés de generación y concurrencia', [sys.executable, 'qa/estres.py']),
+    ('arranque y respuestas tardías', [sys.executable, 'qa/arranque.py']),
     ('seis meses encadenados', [sys.executable, 'qa/encadenado.py']),
     ('cada norma, número a número', [sys.executable, 'qa/reglas.py']),
     ('cambios sobre meses ya hechos', [sys.executable, 'qa/combinaciones.py']),

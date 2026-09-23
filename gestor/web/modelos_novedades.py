@@ -1,7 +1,8 @@
 """Contratos de entrada de solicitudes y asignaciones."""
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
+from pydantic_core import PydanticCustomError
 
 
 class SolicitudNueva(BaseModel):
@@ -45,6 +46,17 @@ class AsignacionNueva(BaseModel):
     descripcion: str = ''
     vigente_desde: Optional[str] = None
     estado: str = 'activo'
+
+    @model_validator(mode='after')
+    def horario_compatible(self):
+        if self.tipo in {'asignacion_administrativa', 'actividad'}:
+            permitidos = {'ADM-GS', 'ADM-AC'}
+            if self.tipo == 'actividad':
+                permitidos |= {'OPERATIVO', 'AM', 'PM'}
+            if self.horario_administrativo not in permitidos:
+                raise PydanticCustomError(
+                    'horario_asignacion', 'Elige un horario compatible para la asignación')
+        return self
 
 
 class AsignacionMasiva(BaseModel):

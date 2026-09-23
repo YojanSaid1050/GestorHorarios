@@ -478,7 +478,13 @@ def _violaciones_fatiga_laboral(
                 intermedios = []
                 continue
             if turno == 'AM':
-                if pm_pendiente is not None and not es_previo:
+                # Las bases manuales se conservan tal como fueron recibidas.
+                # Solo se exime una transición enteramente histórica; si el AM
+                # o una jornada intermedia son nuevos, la regla sigue vigente.
+                historica = pm_pendiente is not None and all(
+                    str(x.get('origen') or '').startswith('base_')
+                    for x in [pm_pendiente, *intermedios, d])
+                if pm_pendiente is not None and not es_previo and not historica:
                     violaciones.append({
                         'empleado': e,
                         'tipo': 'fatiga_pm_am',
@@ -727,6 +733,10 @@ def _violaciones_max_dias_consecutivos(
                 marcas.append(es_previo)
                 if len(racha) >= limite and not es_previo:
                     tramo = racha[-limite:]
+                    if all(str(x.get('origen') or '').startswith('base_') for x in tramo):
+                        # No corregir el pasado. Se conserva la racha para que
+                        # extenderla con una jornada nueva sí se compruebe.
+                        continue
                     violacion = {
                         'empleado': e, 'dia': d, 'fecha': str(d.get('fecha') or ''),
                         'racha': [str(x.get('fecha') or '') for x in racha[-7:]],

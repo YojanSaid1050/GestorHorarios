@@ -27,12 +27,14 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ))
 sys.path.insert(0, str(RAIZ / 'empaquetado'))
 
+import base_septiembre  # noqa: E402
 import plantilla  # noqa: E402
 
 from gestor import credenciales, version  # noqa: E402
@@ -119,27 +121,45 @@ def carpeta_que_lee_el_programa() -> Path:
     return dentro
 
 
+def exigir_plantilla_de_la_oficina() -> None:
+    """Nunca construir una entrega de uso normal con la plantilla de pruebas."""
+    if not os.environ.get(plantilla.VARIABLE, '').strip():
+        raise SystemExit(
+            'Falta GESTOR_NOMINA, la plantilla privada de la oficina. '
+            'No se genera un instalador con datos de ejemplo. '
+            'Para recuperar trabajo anterior, restaura una copia de la base de datos.')
+
+
 def poner_la_plantilla_de_la_oficina() -> bool:
-    """Cambiar las dieciocho personas inventadas por las de verdad.
+    """Sustituir por completo los datos iniciales de pruebas por los privados.
 
-    El repositorio es público, así que lo que está escrito en él es una plantilla
-    inventada. La real llega en el secreto `GESTOR_NOMINA` y se escribe aquí,
-    después de construir y **antes** de empaquetar: los datos iniciales viajan
-    dentro del programa.
-
-    Sin el secreto se construye igual, con la gente inventada, y se dice en voz
-    alta. Quien clone el proyecto tiene que poder compilarlo sin pedirle nada a
-    nadie; lo que no puede pasar es publicar para la oficina una versión con
-    dieciocho desconocidos dentro sin que nadie se entere.
+    Se valida primero en un temporal. Una plantilla parcial no puede dejar meses
+    o registros de ejemplo mezclados con los datos de la oficina.
     """
-    puesta = plantilla.aplicar(carpeta_que_lee_el_programa())
-    if puesta:
-        print('Plantilla de la oficina puesta en el paquete')
-    else:
-        print('AVISO: se construye con la plantilla inventada. Este instalador no '
-              'sirve para la oficina: no trae a su gente ni sus dos meses base.',
-              file=sys.stderr)
-    return puesta
+    exigir_plantilla_de_la_oficina()
+    dentro = carpeta_que_lee_el_programa()
+    with tempfile.TemporaryDirectory(prefix='gestor-plantilla-') as temporal:
+        preparada = Path(temporal)
+        if not plantilla.aplicar(preparada):
+            raise SystemExit('No se pudo cargar la plantilla de la oficina.')
+        datos = preparada / 'datos_iniciales'
+        obligatorios = ('empleados_iniciales.csv', 'base_agosto_2026.json',
+                        'base_septiembre_2026.json')
+        faltan = [nombre for nombre in obligatorios
+                  if not (datos / nombre).is_file() or (datos / nombre).stat().st_size == 0]
+        if faltan:
+            raise SystemExit('La plantilla de la oficina está incompleta. Faltan: '
+                             + ', '.join(faltan))
+        ejemplo = RAIZ / 'datos_iniciales' / 'empleados_iniciales.csv'
+        if (datos / 'empleados_iniciales.csv').read_bytes() == ejemplo.read_bytes():
+            raise SystemExit('GESTOR_NOMINA contiene el personal de ejemplo del repositorio.')
+        base_septiembre.aplicar(datos)
+        destino = dentro / 'datos_iniciales'
+        if destino.exists():
+            shutil.rmtree(destino)
+        shutil.copytree(datos, destino)
+    print('Plantilla de la oficina puesta en el paquete; sin datos iniciales de ejemplo.')
+    return True
 
 
 #: El secreto del que sale el permiso de lectura para las actualizaciones.
@@ -184,6 +204,7 @@ def poner_el_permiso_de_actualizaciones() -> bool:
 
 
 def construir_ejecutable() -> None:
+    exigir_plantilla_de_la_oficina()
     escribir_ficha_de_version()
     if SALIDA.exists():
         # Una carpeta vieja mezclada con la nueva deja archivos de dos versiones
@@ -268,6 +289,8 @@ def empaquetar() -> None:
     lo que acompaña al programa para poder reemplazar una versión por otra
     completa.
     """
+    # También protege la llamada directa a empaquetar(), separada en Actions.
+    poner_la_plantilla_de_la_oficina()
     if shutil.which('vpk') is None:
         raise SystemExit(
             'No se encuentra «vpk». Instálalo con:\n'

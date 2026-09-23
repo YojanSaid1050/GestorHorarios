@@ -1,10 +1,11 @@
-# Comprobación en Windows — candidata 4.3.0
+# Comprobación en Windows — versión 4.3.2
 
-La guía vigente está en [docs/SOLUCION_WINDOWS.md](../docs/SOLUCION_WINDOWS.md).
+La guía de generación y recuperación de datos está en [docs/ENTREGA_WINDOWS.md](../docs/ENTREGA_WINDOWS.md).
+La aceptación manual está en [docs/SOLUCION_WINDOWS.md](../docs/SOLUCION_WINDOWS.md).
 Incluye respaldo, diagnóstico del bloqueo, construcción del asistente y aceptación
 sobre una instalación nueva y sobre una actualización desde 4.2.1.
 
-El instalador esperado es `GestorHorarios-Instalar-4.3.0.exe`.
+El instalador esperado es `GestorHorarios-Instalar-4.3.2.exe`.
 Inno Setup 6.6 o posterior es obligatorio; CI utiliza 6.7.3.
 
 La comprobación del servidor (`--comprobar`) no sustituye a la de la ventana

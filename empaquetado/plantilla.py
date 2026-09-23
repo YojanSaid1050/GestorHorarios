@@ -29,15 +29,17 @@ En el equipo donde esté la carpeta `nomina/` —que está en `.gitignore`—:
 
 Escribe una línea larga en base64. Esa línea se guarda como el secreto
 `GESTOR_NOMINA` del repositorio, y el flujo de publicación la aplica al
-construir.
+construir. La actualización opcional `GESTOR_BASE_SEPTIEMBRE` sustituye solo
+el JSON de septiembre; conserva la plantilla original y agosto.
 
 ## Qué pasa si no está
 
-Se construye igual, con la plantilla inventada, y **se dice en voz alta**. Es lo
-que permite que alguien que clone el proyecto pueda compilarlo sin pedirle nada a
-nadie. Lo que no puede pasar es que se publique una versión para la oficina con
-la gente inventada dentro sin que nadie se entere, y por eso el flujo de
-publicación exige el secreto y se para si falta.
+La construcción de instaladores se detiene. Los datos inventados del repositorio
+solo sirven como fixtures de desarrollo y pruebas; no son una alternativa para
+la aplicación de la oficina. Para recuperar trabajo guardado se necesita una
+base de datos o su copia: esta plantilla inicial no contiene las operaciones
+posteriores del usuario.
+
 """
 from __future__ import annotations
 

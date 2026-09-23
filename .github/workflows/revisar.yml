@@ -1,4 +1,4 @@
-name: Revisar refactorización e instalador
+name: Generar versión final de Windows
 on:
   pull_request:
   workflow_dispatch:
@@ -7,12 +7,18 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Comprobar que existe la plantilla de la oficina
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GESTOR_NOMINA: ${{ secrets.GESTOR_NOMINA }}
+          GESTOR_BASE_SEPTIEMBRE: ${{ secrets.GESTOR_BASE_SEPTIEMBRE }}
+        run: python -c "from empaquetado.construir import exigir_plantilla_de_la_oficina; exigir_plantilla_de_la_oficina()"
       - name: Instalar dependencias de Python
         run: python -m pip install -r requisitos.txt -r empaquetado/requisitos-construccion.txt
       - name: Instalar Velopack
@@ -27,16 +33,31 @@ jobs:
       - name: Revisar el código con Ruff
         run: python -m ruff check gestor empaquetado pruebas qa
       - name: Probar las funciones
-        run: python -m pytest --lentas -v --durations=15
-      - name: Crear el ejecutable y comprobar el servidor con datos de ejemplo
+        run: python -m pytest --lentas -v --durations=15 --junitxml=dist/diagnostico/pruebas.xml
+      - name: Probar estrés y combinaciones por HTTP
+        timeout-minutes: 10
+        run: python qa/estres.py --meses 12 --escenarios 3 --lecturas 200
+
+      - name: Crear el ejecutable con la plantilla real de la oficina
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GESTOR_NOMINA: ${{ secrets.GESTOR_NOMINA }}
+          GESTOR_BASE_SEPTIEMBRE: ${{ secrets.GESTOR_BASE_SEPTIEMBRE }}
+          GESTOR_PERMISO: ${{ secrets.GESTOR_PERMISO }}
         run: python empaquetado/construir.py --solo-exe
       - name: Abrir WebView2 y probar el puente del ejecutable real
+        if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         timeout-minutes: 3
         run: ./empaquetado/comprobar_ventana.ps1
       - name: Crear paquetes de Velopack y asistente de Inno Setup
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GESTOR_NOMINA: ${{ secrets.GESTOR_NOMINA }}
+          GESTOR_BASE_SEPTIEMBRE: ${{ secrets.GESTOR_BASE_SEPTIEMBRE }}
         run: python -c "from empaquetado.construir import empaquetar; empaquetar()"
       - name: Probar destinos e instalación real del asistente
+        if: github.event_name == 'workflow_dispatch'
         timeout-minutes: 10
         run: python empaquetado/comprobar_instalador.py
 
@@ -48,10 +69,11 @@ jobs:
           path: dist/diagnostico/
           if-no-files-found: ignore
           retention-days: 7
-      - name: Guardar instalador comprobado
+      - name: Guardar instalador, portátil y paquetes de actualización
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
-          name: GestorHorarios-revision-Windows
+          name: GestorHorarios-Windows
           path: dist/instalador/
           if-no-files-found: error
           retention-days: 7
