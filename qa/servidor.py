@@ -18,6 +18,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -51,18 +52,38 @@ class Servidor:
         self.carpeta.mkdir(parents=True, exist_ok=True)
         entorno = {**os.environ, 'GESTOR_DATOS': str(self.carpeta),
                    'PYTHONPATH': str(RAIZ), 'PYTHONUNBUFFERED': '1'}
+        # Lo que diga el servidor va a un archivo, no a una tubería.
+        #
+        # Con `stdout=PIPE` y nadie leyéndola, el servidor se bloquea en cuanto
+        # la llena —en Windows son unos pocos kilobytes— y deja de contestar a
+        # mitad de una prueba. Bastan unas cuantas trazas de error de uvicorn,
+        # que van a la consola, para llegar ahí. Es el mismo fallo que ya se
+        # corrigió en la autocomprobación del ejecutable.
+        #
+        # Fuera de la carpeta de datos a propósito: esa carpeta la borra quien
+        # la creó, y un archivo que el servidor aún tuviera abierto lo impediría.
+        descriptor, nombre = tempfile.mkstemp(prefix='gestor-servidor-', suffix='.log')
+        os.close(descriptor)
+        self.registro = Path(nombre)
+        self._salida = self.registro.open('w', encoding='utf-8', errors='replace')
         self.proceso = subprocess.Popen(
             [sys.executable, '-m', 'uvicorn', 'gestor.web.aplicacion:app',
              '--host', '127.0.0.1', '--port', str(self.puerto), '--log-level', 'warning'],
             cwd=RAIZ, env=entorno,
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            stdout=self._salida, stderr=subprocess.STDOUT, text=True)
         if not self.esperar():
-            salida = ''
-            if self.proceso and self.proceso.stdout:
-                self.proceso.kill()
-                salida = self.proceso.stdout.read()[-3000:]
-            raise RuntimeError(f'El servidor no arrancó.\n{salida}')
+            self.__exit__()
+            raise RuntimeError(f'El servidor no arrancó.\n{self.lo_que_dijo()[-3000:]}')
         return self
+
+    def lo_que_dijo(self) -> str:
+        """Todo lo que el servidor escribió en la consola hasta ahora."""
+        if getattr(self, 'registro', None) is None:
+            return getattr(self, '_dicho', '')
+        try:
+            return self.registro.read_text(encoding='utf-8', errors='replace')
+        except OSError:
+            return ''
 
     def esperar(self, segundos: float = 60.0) -> bool:
         limite = time.time() + segundos
@@ -77,12 +98,31 @@ class Servidor:
         return False
 
     def __exit__(self, *_):
+        """Pararlo, **y esperar a que haya terminado de verdad**.
+
+        Tras `kill()` no se esperaba. En Windows eso deja un proceso que todavía
+        tiene abiertos la base y su registro, y quien borre la carpeta de datos
+        justo después se encuentra con «el archivo está siendo usado por otro
+        proceso». Un servidor de pruebas que se sale de aquí vivo no es un
+        detalle: es una carpeta que no se puede limpiar.
+        """
         if self.proceso and self.proceso.poll() is None:
             self.proceso.terminate()
             try:
                 self.proceso.wait(timeout=10)
             except subprocess.TimeoutExpired:
                 self.proceso.kill()
+                self.proceso.wait(timeout=10)
+        salida = getattr(self, '_salida', None)
+        if salida is not None and not salida.closed:
+            salida.close()
+        # Lo que dijo se guarda antes de borrar el archivo, para poder
+        # enseñarlo si algo falló; el archivo en sí no tiene por qué quedarse.
+        registro = getattr(self, 'registro', None)
+        if registro is not None:
+            self._dicho = self.lo_que_dijo()
+            registro.unlink(missing_ok=True)
+            self.registro = None
 
     # ------------------------------------------------------ hablar con él
 

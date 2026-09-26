@@ -379,6 +379,66 @@ def norma_compensatorios(horario) -> Norma:
     return n
 
 
+def norma_domingos(horario, avisos=None) -> Norma:
+    """El reparto de domingos, comprobado aquí y no solo por el motor.
+
+    Era la única regla estricta del motor sin comprobación independiente: el
+    documento de aceptación de la 4.3.2 lo reconoce («la equidad de domingos
+    queda reflejada en los rechazos del motor»). Si el motor y su validación se
+    equivocaran a la vez en esto, nada lo diría.
+
+    El enunciado: de los domingos del mes, la mitad trabajados y la mitad
+    descansados; con un número impar, el que sobra se descansa. El domingo
+    heredado de la semana compartida **cuenta** para el total —es un domingo del
+    mes—, aunque este mes no pueda cambiarlo: los demás los decide el programa.
+
+    Exentos, con su motivo:
+
+    * administrativos, quien tiene descanso fijo y quien está exento de
+      especiales, a quienes no se les reparte;
+    * quien entra o sale a mitad de mes: no alcanza todos los domingos y el
+      reparto mensual no se le puede exigir entero (el motor lo deja en aviso);
+    * lo que el motor haya **avisado expresamente** para esa persona: es su
+      último recurso cuando no existe ningún reparto posible, y se acepta solo si
+      queda dicho. Callado sería un fallo.
+    """
+    n = Norma('reparto de domingos',
+              'cada persona trabaja la mitad de los domingos del mes; si son '
+              'impares, el que sobra lo descansa')
+    avisados = [str(a) for a in (avisos or []) if 'domingos' in str(a)]
+    for fila in horario:
+        if (fila.get('tipo_turno') == 'administrativo' or fila.get('descanso_fijo') is not None
+                or fila.get('exento_especiales')):
+            n.eximir(f"{fila['nombre']}: no entra en el reparto de domingos")
+            continue
+        domingos = [d for d in fila['dias'] if d.get('es_domingo') and d.get('mes_propio', True)]
+        if not domingos:
+            continue
+        vigentes = [d for d in domingos if d['turno'] != FUERA]
+        if len(vigentes) < len(domingos):
+            n.eximir(f"{fila['nombre']}: vigente en {len(vigentes)} de {len(domingos)} domingos")
+            continue
+        if all(_heredado(d) for d in vigentes):
+            n.eximir(f"{fila['nombre']}: todos sus domingos son heredados")
+            continue
+        trabajados = sum(d['turno'] in TRABAJO for d in vigentes)
+        debe = len(vigentes) // 2
+        # El aviso tiene que ser **el de este reparto**, no cualquiera que nombre a
+        # la persona y diga «domingos». Con la comprobación floja, un aviso del
+        # motor sobre cómo cerró alguien la semana anterior —que menciona los
+        # domingos de pasada— servía de permiso, y así se escondían veintidós
+        # repartos que el propio motor había rechazado.
+        declarado = f"{fila['nombre']}: trabaja {trabajados} de {len(vigentes)} domingos"
+        if trabajados != debe and any(declarado in a for a in avisados):
+            n.eximir(f"{fila['nombre']}: {trabajados} de {len(vigentes)} domingos, "
+                     'avisado por el motor como excepción')
+            continue
+        n.revisar(trabajados == debe,
+                  f"{fila['nombre']}: trabaja {trabajados} de {len(vigentes)} domingos; "
+                  f'le tocaban {debe}')
+    return n
+
+
 def norma_ultimo_viernes(horario) -> Norma:
     n = Norma('último viernes administrativo',
               'ese día toda la oficina hace jornada administrativa, salvo quien '
@@ -577,7 +637,8 @@ def norma_internas(horario) -> Norma:
 
 # ------------------------------------------------------------- el informe
 
-def revisar_mes(horario, reglas, tope) -> list[Norma]:
+def revisar_mes(horario, reglas, tope, avisos=None) -> list[Norma]:
+    """Todas las normas de un mes. `avisos`, los del motor para esa opción."""
     suelo, techo = norma_cobertura(horario, reglas)
     return [
         norma_casillas(horario),
@@ -589,11 +650,33 @@ def revisar_mes(horario, reglas, tope) -> list[Norma]:
         norma_jornadas_seguidas(horario, tope),
         norma_pm_am(horario),
         norma_parejas(horario),
+        norma_domingos(horario, avisos),
         norma_compensatorios(horario),
         norma_ultimo_viernes(horario),
         norma_vigencia(horario),
         norma_internas(horario),
     ]
+
+
+def lo_rechazo_el_motor(fallo: str, alternativa: dict) -> bool:
+    """¿Este incumplimiento ya lo dijo el motor, y por eso la opción no vale?
+
+    El programa ofrece también las opciones que no cumplen, marcadas como no
+    válidas y con su error escrito, para que se vea por qué se descartan. Que
+    esta comprobación encuentre lo mismo en una de ellas no es un fallo: es el
+    motor y la comprobación independiente diciendo lo mismo. Lo que sí sería un
+    fallo, y se sigue contando, es:
+
+    * un incumplimiento en una opción que el motor da por **válida**;
+    * o uno en una opción no válida que el motor **no** nombra en sus errores.
+
+    Se compara lo que va antes del «;» —«Fulano: trabaja 3 de 4 domingos»— con
+    el texto de los errores: si el motor se calla ese caso, no se exime.
+    """
+    if alternativa.get('valido', True):
+        return False
+    esencial = fallo.split(';', 1)[0].strip()
+    return bool(esencial) and any(esencial in str(e) for e in alternativa.get('errores') or [])
 
 
 def main() -> int:
@@ -622,15 +705,23 @@ def main() -> int:
             reglas = reglas_vigentes_en(servidor, cabeceras, anio, mes)
             print(f'{nombre.upper()}  ({len(generado["alternativas"])} propuestas)')
             for numero, alternativa in enumerate(generado['alternativas'], 1):
-                normas = revisar_mes(alternativa['horario'], reglas, tope)
+                normas = revisar_mes(alternativa['horario'], reglas, tope,
+                                     alternativa.get('advertencias'))
                 revisados = sum(n.revisados for n in normas)
                 revisados_total += revisados
                 malas = [n for n in normas if not n.bien]
                 cabecera = f'  opción {numero} · {revisados} comprobaciones'
-                print(f'{cabecera}{"" if not malas else "  ← INCUMPLE"}')
+                if malas and not alternativa.get('valido', True):
+                    cabecera += '  ← no válida: el motor la descarta'
+                elif malas:
+                    cabecera += '  ← INCUMPLE'
+                print(cabecera)
                 for norma in normas:
                     print(norma.linea())
                     for fallo in norma.fallos[:4]:
+                        if lo_rechazo_el_motor(fallo, alternativa):
+                            print(f'          · {fallo}  [el motor también la rechaza: coinciden]')
+                            continue
                         print(f'          · {fallo}')
                         problemas += 1
                     for nota in norma.notas[:1]:

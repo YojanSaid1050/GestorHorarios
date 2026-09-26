@@ -9,11 +9,13 @@ from __future__ import annotations
 import argparse
 import gzip
 import json
+import shutil
 import sqlite3
 import sys
 import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from datetime import date, timedelta
 from pathlib import Path
 from threading import Barrier
@@ -26,6 +28,21 @@ from pruebas.auditor import auditar  # noqa: E402
 from qa.encadenado import reglas_vigentes_en  # noqa: E402
 from qa.reglas import revisar_mes  # noqa: E402
 from qa.servidor import Servidor, entrar_como_admin  # noqa: E402
+
+
+def borrar_carpeta(carpeta: Path, intentos: int = 10, pausa: float = 0.5) -> str:
+    """Borrar la carpeta temporal del escenario. Devuelve el problema, si lo hay."""
+    ultimo = ""
+    for _ in range(intentos):
+        try:
+            shutil.rmtree(carpeta)
+            return ""
+        except FileNotFoundError:
+            return ""
+        except OSError as fallo:
+            ultimo = f"{type(fallo).__name__}: {fallo}"
+            time.sleep(pausa)
+    return ultimo
 
 
 def mapa(horario):
@@ -71,7 +88,7 @@ class Prueba:
         for a in r["alternativas"]:
             fallos = auditar(a["horario"], reglas)
             propios = [x for x in fallos if "(heredado)" not in x[0]]
-            normas = revisar_mes(a["horario"], reglas, tope)
+            normas = revisar_mes(a["horario"], reglas, tope, a.get("advertencias"))
             for norma in normas:
                 propios.extend((norma.clave, f) for f in norma.fallos)
             if a["reglas"]["maximo_dias_consecutivos"] != tope:
@@ -118,25 +135,53 @@ class Prueba:
         return [self.pedir(f"/api/horarios/oficial/2026/{mes}") for mes in (8, 9)]
 
     def integridad(self):
-        with sqlite3.connect(self.s.carpeta / "horarios.db") as c:
+        # `closing` y no `with sqlite3.connect(...)` a secas, que es lo que había.
+        #
+        # El `with` de una conexión de SQLite confirma la transacción al salir
+        # pero **no cierra la conexión**. Y en Python 3.11 esa conexión forma un
+        # ciclo de referencias consigo misma —su caché de sentencias la apunta—,
+        # así que tampoco se cierra al salir de la función: sigue abierta hasta
+        # que pasa el recolector de ciclos. Mientras, `horarios.db`, `-wal` y
+        # `-shm` siguen abiertos por este proceso. En Linux borrar un archivo
+        # abierto está permitido y no se nota; en Windows, al borrar la carpeta
+        # temporal, sale «WinError 32: el archivo está siendo usado por otro
+        # proceso». El otro proceso era este.
+        with closing(sqlite3.connect(self.s.carpeta / "horarios.db")) as c:
             assert c.execute("PRAGMA quick_check").fetchone()[0] == "ok"
             assert not c.execute("PRAGMA foreign_key_check").fetchall()
 
     def ejecutar(self, nombre, funcion):
         inicio = time.monotonic()
-        with tempfile.TemporaryDirectory(prefix="gestor-estres-") as carpeta:
-            try:
-                with Servidor(Path(carpeta) / "datos") as self.s:
-                    self.h = entrar_como_admin(self.s)
-                    antes = self.bases()
-                    funcion()
-                    assert self.bases() == antes, "se modificaron las bases históricas"
-                    self.integridad()
-                estado = "correcto"
-            except Exception as error:  # noqa: BLE001
-                estado = "fallo"
-                self.informe["fallos"].append({"escenario": nombre, "error": str(error)})
-                print(f"FALLA {nombre}: {error}", flush=True)
+        carpeta = Path(tempfile.mkdtemp(prefix="gestor-estres-"))
+        try:
+            with Servidor(carpeta / "datos") as self.s:
+                self.h = entrar_como_admin(self.s)
+                antes = self.bases()
+                funcion()
+                assert self.bases() == antes, "se modificaron las bases históricas"
+                self.integridad()
+            estado = "correcto"
+        except Exception as error:  # noqa: BLE001
+            estado = "fallo"
+            self.informe["fallos"].append({"escenario": nombre, "error": str(error)})
+            print(f"FALLA {nombre}: {error}", flush=True)
+        # La limpieza, **dentro** del recuento y no fuera.
+        #
+        # Con `TemporaryDirectory` como bloque, un fallo al borrar la carpeta
+        # saltaba por encima del `try`: el escenario había terminado bien, pero
+        # el script entero se caía ahí, los escenarios siguientes no llegaban a
+        # correr y no se imprimía ningún veredicto. Ahora se intenta unos
+        # segundos —en Windows el antivirus puede tener un archivo recién
+        # cerrado un instante— y, si aun así no se puede, cuenta como fallo de
+        # este escenario y se sigue con los demás. No se silencia: un archivo
+        # que no se deja borrar es una conexión o un proceso que alguien olvidó
+        # cerrar, y eso es justo lo que esta prueba tiene que decir.
+        problema = borrar_carpeta(carpeta)
+        if problema:
+            estado = "fallo"
+            self.informe["fallos"].append(
+                {"escenario": nombre, "error": f"no se pudo limpiar: {problema}"})
+            print(f"FALLA {nombre}: no se pudo limpiar: {problema}", flush=True)
         self.informe["escenarios"].append(
             {"nombre": nombre, "estado": estado, "segundos": round(time.monotonic() - inicio, 3)}
         )
